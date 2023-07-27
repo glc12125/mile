@@ -4,6 +4,7 @@ import logging
 from collections import deque
 
 import torch
+import time
 from omegaconf import OmegaConf
 from torchmetrics import JaccardIndex
 
@@ -19,6 +20,8 @@ class MileAgent:
         self._logger = logging.getLogger(__name__)
         self._render_dict = None
         self.setup(path_to_conf_file)
+        self.inference_avg_time = 0.0
+        self.inference_counter = 0
 
     def setup(self, path_to_conf_file):
         cfg = OmegaConf.load(path_to_conf_file)
@@ -83,10 +86,17 @@ class MileAgent:
         # Forward pass
         with torch.no_grad():
             is_dreaming = False
+            start_time = time.time()
             if self.cfg['online_deployment']:
                 output = self._policy.deployment_forward(policy_input, is_dreaming=is_dreaming)
             else:
                 output = self._policy(policy_input, deployment=True)
+            end_time = time.time()
+            execution_time = end_time - start_time
+            print("--- Inferencing time %s seconds ---" % (execution_time))
+            self.inference_avg_time = (self.inference_avg_time * self.inference_counter + execution_time) / (self.inference_counter + 1)
+            print("--- AVG Inferencing time %s seconds ---" % (self.inference_avg_time))
+            self.inference_counter += 1
 
         actions = torch.cat([output['throttle_brake'], output['steering']], dim=-1)[0, 0].cpu().numpy()
         control = self._env_wrapper.process_act(actions)

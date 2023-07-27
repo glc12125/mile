@@ -4,6 +4,6 @@ defaults:
 mile:
   entry_point: agents.mile.mile_agent:MileAgent
   ckpt: ''
-  online_deployment: false
+  online_deployment: true
   env_wrapper:
     entry_point: agents.mile.mile_wrapper:MileWrapper
