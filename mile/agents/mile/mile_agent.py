@@ -158,7 +158,7 @@ class MileAgent:
                   (execution_time))
             self.render_avg_time = (
                 self.render_avg_time * self.inference_counter + execution_time) / (self.inference_counter + 1)
-            print("--- AVG Prepare rendering time %s seconds ---" %
+            print("--- AVG Prepare rendering time %s seconds ---\n" %
                   (self.render_avg_time))
         self.inference_counter += 1
         return control
