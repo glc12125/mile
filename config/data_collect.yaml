@@ -8,7 +8,7 @@ defaults:
 dataset_root: ''
 carla_sh_path: ''
 port: 2000
-n_episodes: 200
+n_episodes: 100
 
 ev_id: hero
 resume: true

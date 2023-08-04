@@ -15,13 +15,14 @@ data_collect () {
   python -u data_collect.py --config-name data_collect carla_sh_path=${CARLA_PATH} dataset_root=${DATASET_ROOT} port=${PORT} test_suites=${TEST_SUITE}
 }
 
-source ~/miniconda3/etc/profile.d/conda.sh
+#source ~/miniconda3/etc/profile.d/conda.sh
+source /root/miniconda3/envs/mile/etc/conda/activate.d/env_vars.sh
 conda activate mile
 
 # Remove checkpoint files
-rm outputs/port_${PORT}_checkpoint.txt
-rm outputs/port_${PORT}_wb_run_id.txt
-rm outputs/port_${PORT}_ep_stat_buffer_*.json
+#rm outputs/port_${PORT}_checkpoint.txt
+#rm outputs/port_${PORT}_wb_run_id.txt
+#rm outputs/port_${PORT}_ep_stat_buffer_*.json
 
 
 # Resume benchmark in case carla crashed.

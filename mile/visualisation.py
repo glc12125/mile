@@ -138,7 +138,7 @@ def merge_sparse_image_to_image_torch(
 
 
 def add_legend(img, text='hello', position=(0, 0), colour=[255, 255, 255], size=14):
-    font_path = 'DejaVuSans.ttf'
+    font_path = 'arial.ttf'
     font = ImageFont.truetype(font_path, size)
 
     pil_img = Image.fromarray(img)

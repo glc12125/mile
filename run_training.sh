@@ -1,0 +1,1 @@
+CUDA_VISIBLE_DEVICES=0,1 python train.py --config /home/dev/mile/mile/configs/mile.yml DATASET.DATAROOT /home/dev/mile/data
