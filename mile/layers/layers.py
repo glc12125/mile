@@ -115,7 +115,7 @@ class ConvBlock(nn.Module):
         if activation == 'relu':
             self.activation = nn.ReLU(inplace=True)
         elif activation == 'lrelu':
-            self.activation = nn.LeakyReLU(0.1, inplace=True)
+            self.activation = nn.LeakyReLU(0.1)
         elif activation == 'elu':
             self.activation = nn.ELU(inplace=True)
         elif activation == 'tanh':
