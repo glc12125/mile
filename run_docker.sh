@@ -22,6 +22,7 @@ docker run \
 	--privileged \
 	--device=/dev/dri \
 	--group-add video \
+	--shm-size 128G \
 	--volume=/tmp/.X11-unix:/tmp/.X11-unix  \
 	-v $HOME/dev:/home/$CONTAINER_USER/dev \
         -v ${EXTERNAL_DRIVE}:/root/media \

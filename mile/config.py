@@ -257,11 +257,11 @@ def get_cfg(args=None, cfg_dict=None):
         cfg.merge_from_other_cfg(CfgNode(cfg_dict))
 
     if args is not None:
-        if args.config:
-            cfg.merge_from_file(args.config)
+        if args.config_file:
+            cfg.merge_from_file(args.config_file)
 
-        if args.config1:
-            cfg.merge_from_file(args.config1)
+        #if args.config1:
+        #    cfg.merge_from_file(args.config1)
 
         if args.opts:
             cfg.merge_from_list(args.opts)

@@ -25,6 +25,7 @@ class SaveGitDiffHashCallback(pl.Callback):
 
 def main():
     args = get_parser().parse_args()
+    print(args)
     cfg = get_cfg(args)
 
     data = DataModule(cfg)
