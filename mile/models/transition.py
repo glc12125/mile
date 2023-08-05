@@ -10,7 +10,7 @@ class RepresentationModel(nn.Module):
 
         self.module = nn.Sequential(
             nn.Linear(in_channels, in_channels),
-            nn.LeakyReLU(),
+            nn.LeakyReLU(True),
             nn.Linear(in_channels, 2*self.latent_dim),
         )
 
@@ -44,7 +44,7 @@ class RSSM(nn.Module):
         # Map input of the gru to a space with easier temporal dynamics
         self.pre_gru_net = nn.Sequential(
             nn.Linear(state_dim, hidden_state_dim),
-            nn.LeakyReLU(),
+            nn.LeakyReLU(True),
         )
 
         self.recurrent_model = nn.GRUCell(
@@ -55,7 +55,7 @@ class RSSM(nn.Module):
         # Map action to a higher dimensional input
         self.posterior_action_module = nn.Sequential(
             nn.Linear(action_dim, self.action_latent_dim),
-            nn.LeakyReLU(),
+            nn.LeakyReLU(True),
         )
 
         self.posterior = RepresentationModel(
@@ -66,7 +66,7 @@ class RSSM(nn.Module):
         # Map action to a higher dimensional input
         self.prior_action_module = nn.Sequential(
             nn.Linear(action_dim, self.action_latent_dim),
-            nn.LeakyReLU(),
+            nn.LeakyReLU(True),
         )
         self.prior = RepresentationModel(
             in_channels=hidden_state_dim + self.action_latent_dim, latent_dim=state_dim)

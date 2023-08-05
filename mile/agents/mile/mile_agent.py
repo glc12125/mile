@@ -32,6 +32,7 @@ class MileAgent:
         self.export_torchvis = False
         self.export_onnx_done = False
         self.export_torchvis_done = False
+        self.print_stats = False
 
     def setup(self, path_to_conf_file):
         cfg = OmegaConf.load(path_to_conf_file)
@@ -103,11 +104,13 @@ class MileAgent:
         end_time = time.time()
         execution_time = end_time - start_time
         if self.inference_counter > 50:
-            print("--- Preprocess time %s seconds ---" % (execution_time))
+            if self.print_stats:
+                print("--- Preprocess time %s seconds ---" % (execution_time))
             self.preprocess_avg_time = (
                 self.preprocess_avg_time * self.inference_counter + execution_time) / (self.inference_counter + 1)
-            print("--- AVG Preprocess time %s seconds ---" %
-                  (self.preprocess_avg_time))
+            if self.print_stats:
+                print("--- AVG Preprocess time %s seconds ---" %
+                      (self.preprocess_avg_time))
 
         if self.export_onnx and self.export_onnx_done == False:
             torch.onnx.export(self._policy,         # model being run
@@ -132,20 +135,28 @@ class MileAgent:
             is_dreaming = False
             start_time = time.time()
             if self.cfg['online_deployment']:
+                # Move self._policy.preprocess from forward/deployment_forward
+                batch = self._policy.preprocess(policy_input)
                 output = self._policy.deployment_forward(
-                    policy_input, is_dreaming=is_dreaming)
+                    batch, is_dreaming=is_dreaming)
             else:
-                output = self._policy(policy_input, deployment=True)
+                # Move self._policy.preprocess from forward/deployment_forward
+                batch = self._policy.preprocess(policy_input)
+                output = self._policy(batch, deployment=True)
             end_time = time.time()
             execution_time = end_time - start_time
             if self.inference_counter > 50:
-                print("--- Inferencing time %s seconds ---" % (execution_time))
+                if self.print_stats:
+                    print("--- Inferencing time %s seconds ---" %
+                          (execution_time))
                 self.inference_avg_time = (
                     self.inference_avg_time * self.inference_counter + execution_time) / (self.inference_counter + 1)
-                print("--- AVG Inferencing time %s seconds ---" %
-                      (self.inference_avg_time))
+                if self.print_stats:
+                    print("--- AVG Inferencing time %s seconds ---" %
+                          (self.inference_avg_time))
             else:
-                print("Skipping frame %s" % (self.inference_counter))
+                if self.print_stats:
+                    print("Skipping frame %s" % (self.inference_counter))
 
         if self.export_torchvis and self.export_torchvis_done == False:
             make_dot(output, params=dict(self._policy.named_parameters())
@@ -163,22 +174,27 @@ class MileAgent:
         end_time = time.time()
         execution_time = end_time - start_time
         if self.inference_counter > 50:
-            print("--- Postprocess time %s seconds ---" % (execution_time))
+            if self.print_stats:
+                print("--- Postprocess time %s seconds ---" % (execution_time))
             self.postprocess_avg_time = (
                 self.postprocess_avg_time * self.inference_counter + execution_time) / (self.inference_counter + 1)
-            print("--- AVG Postprocess time %s seconds ---" %
-                  (self.postprocess_avg_time))
+            if self.print_stats:
+                print("--- AVG Postprocess time %s seconds ---" %
+                      (self.postprocess_avg_time))
         start_time = time.time()
         # Metrics
         metrics = self.forward_metrics(policy_input, output)
         end_time = time.time()
         execution_time = end_time - start_time
         if self.inference_counter > 50:
-            print("--- Forward metrics time %s seconds ---" % (execution_time))
+            if self.print_stats:
+                print("--- Forward metrics time %s seconds ---" %
+                      (execution_time))
             self.metrics_avg_time = (
                 self.metrics_avg_time * self.inference_counter + execution_time) / (self.inference_counter + 1)
-            print("--- AVG Forward metrics time %s seconds ---" %
-                  (self.metrics_avg_time))
+            if self.print_stats:
+                print("--- AVG Forward metrics time %s seconds ---" %
+                      (self.metrics_avg_time))
 
         start_time = time.time()
         self.prepare_rendering(policy_input, output,
@@ -186,12 +202,14 @@ class MileAgent:
         end_time = time.time()
         execution_time = end_time - start_time
         if self.inference_counter > 50:
-            print("--- Prepare rendering time %s seconds ---" %
-                  (execution_time))
+            if self.print_stats:
+                print("--- Prepare rendering time %s seconds ---" %
+                      (execution_time))
             self.render_avg_time = (
                 self.render_avg_time * self.inference_counter + execution_time) / (self.inference_counter + 1)
-            print("--- AVG Prepare rendering time %s seconds ---\n" %
-                  (self.render_avg_time))
+            if self.print_stats:
+                print("--- AVG Prepare rendering time %s seconds ---\n" %
+                      (self.render_avg_time))
         self.inference_counter += 1
         return control
 

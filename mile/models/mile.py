@@ -398,6 +398,14 @@ class Mile(nn.Module):
 
         return output_imagine
 
+    def prepare_input(self, batch):
+        # Encode RGB images, route_map, speed using intrinsics and extrinsics
+        # to a 512 dimensional vector
+        b, s = batch['image'].shape[:2]
+        embedding = self.encode(batch)  # dim (b, s, 512)
+        # Assuming deployment mode only
+        action = batch['action']
+
     def deployment_forward(self, batch, is_dreaming):
         """
         Keep latent states in memory for fast inference.

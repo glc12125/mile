@@ -127,7 +127,7 @@ class ConvInstanceNorm(nn.Module):
         super().__init__()
         self.conv_act = nn.Sequential(
             nn.Conv2d(in_channels, out_channels, 3, 1, 1),
-            nn.LeakyReLU(0.2),
+            nn.LeakyReLU(0.2, inplace=True),
         )
 
         self.adaptive_norm = AdaptiveInstanceNorm(

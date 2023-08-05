@@ -67,13 +67,15 @@ class WorldModelTrainer(pl.LightningModule):
 
     def forward(self, batch, deployment=True):
         # print("batch: {}".format(batch))
-        batch = self.preprocess(batch)
+        # The following preprocess has been moved out to it's caller, mile_agent
+        # batch = self.preprocess(batch)
         output = self.model.forward(batch, deployment=deployment)
         return output
 
     def deployment_forward(self, batch, is_dreaming):
-        print("deployment_forward batch: {}".format(batch))
-        batch = self.preprocess(batch)
+        # print("deployment_forward batch: {}".format(batch))
+        # The following preprocess has been moved out to it's caller, mile_agent
+        # batch = self.preprocess(batch)
         output = self.model.deployment_forward(batch, is_dreaming)
         return output
 
