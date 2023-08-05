@@ -66,12 +66,13 @@ class WorldModelTrainer(pl.LightningModule):
                 raise FileExistsError(self.cfg.PRETRAINED.PATH)
 
     def forward(self, batch, deployment=True):
-        print("batch: {}".format(batch))
+        # print("batch: {}".format(batch))
         batch = self.preprocess(batch)
         output = self.model.forward(batch, deployment=deployment)
         return output
 
     def deployment_forward(self, batch, is_dreaming):
+        print("deployment_forward batch: {}".format(batch))
         batch = self.preprocess(batch)
         output = self.model.deployment_forward(batch, is_dreaming)
         return output

@@ -163,6 +163,9 @@ class Mile(nn.Module):
         self.last_action = None
         self.count = 0
 
+    def forward_test(self, batch, deployment=False):
+        return self.deployment_forward(batch, deployment)
+
     def forward(self, batch, deployment=False):
         """
         Parameters
@@ -184,6 +187,7 @@ class Mile(nn.Module):
 
         output = dict()
         if self.cfg.MODEL.TRANSITION.ENABLED:
+            print("Transition enabled")
             # Recurrent state sequence module
             if deployment:
                 action = batch['action']
@@ -201,6 +205,7 @@ class Mile(nn.Module):
             state = torch.cat([state_dict['posterior']['hidden_state'],
                               state_dict['posterior']['sample']], dim=-1)
         else:
+            print("Transition disabled")
             state = embedding
 
         state = pack_sequence_dim(state)

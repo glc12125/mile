@@ -29,7 +29,7 @@ class MileAgent:
         self.render_avg_time = 0.0
         self.inference_counter = 0
         self.export_onnx = False
-        self.export_torchvis = True
+        self.export_torchvis = False
         self.export_onnx_done = False
         self.export_torchvis_done = False
 
@@ -99,7 +99,7 @@ class MileAgent:
     def run_step(self, input_data, timestamp):
         start_time = time.time()
         policy_input = self.preprocess_data(input_data)
-        print("policy_input: {}".format(policy_input))
+        # print("policy_input: {}".format(policy_input))
         end_time = time.time()
         execution_time = end_time - start_time
         if self.inference_counter > 50:

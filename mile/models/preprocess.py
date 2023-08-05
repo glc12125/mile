@@ -114,7 +114,7 @@ class PreProcess(nn.Module):
 
     def forward(self, batch: Dict[str, torch.Tensor]):
         #  Normalise from [0, 255] to [0, 1]
-        print("batch: {}".format(batch))
+        # print("batch: {}".format(batch))
         batch['image'] = batch['image'].float() / 255
 
         if 'route_map' in batch:
