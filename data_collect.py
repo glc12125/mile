@@ -160,7 +160,7 @@ def main(cfg: DictConfig):
     wandb.init(project=cfg.wb_project, name=wb_run_name, group=cfg.wb_group, notes=cfg.wb_notes, tags=cfg.wb_tags,
                id=wb_run_id, resume="allow")
     wandb.config.update(OmegaConf.to_container(cfg))
-    wandb.save('./config_agent.yaml')
+    wandb.save('/home/Development/wandb/config_agent.yaml')
     with open(wb_checkpoint_path, 'w') as f:
         f.write(wandb.run.id)
 

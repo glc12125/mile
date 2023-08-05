@@ -100,8 +100,10 @@ class ConvBlock(nn.Module):
         super().__init__()
         out_channels = out_channels or in_channels
         padding = int((kernel_size - 1) / 2)
-        self.conv = nn.Conv2d if not transpose else partial(nn.ConvTranspose2d, output_padding=1)
-        self.conv = self.conv(in_channels, out_channels, kernel_size, stride, padding=padding, bias=bias)
+        self.conv = nn.Conv2d if not transpose else partial(
+            nn.ConvTranspose2d, output_padding=1)
+        self.conv = self.conv(in_channels, out_channels,
+                              kernel_size, stride, padding=padding, bias=bias)
 
         if norm == 'bn':
             self.norm = nn.BatchNorm2d(out_channels)
@@ -115,7 +117,7 @@ class ConvBlock(nn.Module):
         if activation == 'relu':
             self.activation = nn.ReLU(inplace=True)
         elif activation == 'lrelu':
-            self.activation = nn.LeakyReLU(0.1, inplace=True)
+            self.activation = nn.LeakyReLU(0.1)
         elif activation == 'elu':
             self.activation = nn.ELU(inplace=True)
         elif activation == 'tanh':
@@ -198,14 +200,17 @@ class Bottleneck(nn.Module):
             OrderedDict(
                 [
                     # First projection with 1x1 kernel
-                    ('conv_down_project', nn.Conv2d(in_channels, bottleneck_channels, kernel_size=1, bias=False)),
+                    ('conv_down_project', nn.Conv2d(in_channels,
+                     bottleneck_channels, kernel_size=1, bias=False)),
                     ('abn_down_project', nn.Sequential(nn.BatchNorm2d(bottleneck_channels),
                                                        nn.ReLU(inplace=True))),
                     # Second conv block
                     ('conv', bottleneck_conv),
-                    ('abn', nn.Sequential(nn.BatchNorm2d(bottleneck_channels), nn.ReLU(inplace=True))),
+                    ('abn', nn.Sequential(nn.BatchNorm2d(
+                        bottleneck_channels), nn.ReLU(inplace=True))),
                     # Final projection with 1x1 kernel
-                    ('conv_up_project', nn.Conv2d(bottleneck_channels, out_channels, kernel_size=1, bias=False)),
+                    ('conv_up_project', nn.Conv2d(bottleneck_channels,
+                     out_channels, kernel_size=1, bias=False)),
                     ('abn_up_project', nn.Sequential(nn.BatchNorm2d(out_channels),
                                                      nn.ReLU(inplace=True))),
                     # Regulariser
@@ -219,9 +224,11 @@ class Bottleneck(nn.Module):
         else:
             projection = OrderedDict()
             if upsample:
-                projection.update({'upsample_skip_proj': Interpolate(scale_factor=2)})
+                projection.update(
+                    {'upsample_skip_proj': Interpolate(scale_factor=2)})
             elif downsample:
-                projection.update({'upsample_skip_proj': nn.MaxPool2d(kernel_size=2, stride=2)})
+                projection.update(
+                    {'upsample_skip_proj': nn.MaxPool2d(kernel_size=2, stride=2)})
             projection.update(
                 {
                     'conv_skip_proj': nn.Conv2d(in_channels, out_channels, kernel_size=1, bias=False),
@@ -237,7 +244,8 @@ class Bottleneck(nn.Module):
         if self.projection is not None:
             if self._downsample:
                 # pad h/w dimensions if they are odd to prevent shape mismatch with residual layer
-                x = nn.functional.pad(x, (0, x.shape[-1] % 2, 0, x.shape[-2] % 2), value=0)
+                x = nn.functional.pad(
+                    x, (0, x.shape[-1] % 2, 0, x.shape[-2] % 2), value=0)
             return x_residual + self.projection(x)
         return x_residual + x
 
@@ -257,8 +265,10 @@ class Upsampling(nn.Module):
     def __init__(self, in_channels, out_channels, scale_factor=2):
         super().__init__()
         self.upsample_layer = nn.Sequential(
-            nn.Upsample(scale_factor=scale_factor, mode='bilinear', align_corners=False),
-            nn.Conv2d(in_channels, out_channels, kernel_size=1, padding=0, bias=False),
+            nn.Upsample(scale_factor=scale_factor,
+                        mode='bilinear', align_corners=False),
+            nn.Conv2d(in_channels, out_channels,
+                      kernel_size=1, padding=0, bias=False),
             nn.BatchNorm2d(out_channels),
             nn.ReLU(inplace=True),
         )
@@ -272,8 +282,10 @@ class UpsamplingAdd(nn.Module):
     def __init__(self, in_channels, action_channels, out_channels, scale_factor=2):
         super().__init__()
         self.upsample_layer = nn.Sequential(
-            nn.Upsample(scale_factor=scale_factor, mode='bilinear', align_corners=False),
-            nn.Conv2d(in_channels + action_channels, out_channels, kernel_size=1, padding=0, bias=False),
+            nn.Upsample(scale_factor=scale_factor,
+                        mode='bilinear', align_corners=False),
+            nn.Conv2d(in_channels + action_channels, out_channels,
+                      kernel_size=1, padding=0, bias=False),
             nn.BatchNorm2d(out_channels),
             nn.ReLU(inplace=True),
         )
@@ -290,13 +302,16 @@ class UpsamplingAdd(nn.Module):
 class UpsamplingConcat(nn.Module):
     def __init__(self, in_channels, out_channels, scale_factor=2):
         super().__init__()
-        self.upsample = nn.Upsample(scale_factor=scale_factor, mode='bilinear', align_corners=False)
+        self.upsample = nn.Upsample(
+            scale_factor=scale_factor, mode='bilinear', align_corners=False)
 
         self.conv = nn.Sequential(
-            nn.Conv2d(in_channels, out_channels, kernel_size=3, padding=1, bias=False),
+            nn.Conv2d(in_channels, out_channels,
+                      kernel_size=3, padding=1, bias=False),
             nn.BatchNorm2d(out_channels),
             nn.ReLU(inplace=True),
-            nn.Conv2d(out_channels, out_channels, kernel_size=3, padding=1, bias=False),
+            nn.Conv2d(out_channels, out_channels,
+                      kernel_size=3, padding=1, bias=False),
             nn.BatchNorm2d(out_channels),
             nn.ReLU(inplace=True),
         )

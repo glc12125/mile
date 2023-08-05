@@ -25,18 +25,20 @@ class PreProcess(nn.Module):
 
         self.pixel_augmentation = PixelAugmentation(cfg)
         self.route_augmentation = RouteAugmentation(
-                cfg.ROUTE.AUGMENTATION_DROPOUT,
-                cfg.ROUTE.AUGMENTATION_END_OF_ROUTE,
-                cfg.ROUTE.AUGMENTATION_SMALL_ROTATION,
-                cfg.ROUTE.AUGMENTATION_LARGE_ROTATION,
-                cfg.ROUTE.AUGMENTATION_DEGREES,
-                cfg.ROUTE.AUGMENTATION_TRANSLATE,
-                cfg.ROUTE.AUGMENTATION_SCALE,
-                cfg.ROUTE.AUGMENTATION_SHEAR,
-            )
+            cfg.ROUTE.AUGMENTATION_DROPOUT,
+            cfg.ROUTE.AUGMENTATION_END_OF_ROUTE,
+            cfg.ROUTE.AUGMENTATION_SMALL_ROTATION,
+            cfg.ROUTE.AUGMENTATION_LARGE_ROTATION,
+            cfg.ROUTE.AUGMENTATION_DEGREES,
+            cfg.ROUTE.AUGMENTATION_TRANSLATE,
+            cfg.ROUTE.AUGMENTATION_SCALE,
+            cfg.ROUTE.AUGMENTATION_SHEAR,
+        )
 
-        self.register_buffer('image_mean', torch.tensor(cfg.IMAGE.IMAGENET_MEAN).unsqueeze(1).unsqueeze(1))
-        self.register_buffer('image_std', torch.tensor(cfg.IMAGE.IMAGENET_STD).unsqueeze(1).unsqueeze(1))
+        self.register_buffer('image_mean', torch.tensor(
+            cfg.IMAGE.IMAGENET_MEAN).unsqueeze(1).unsqueeze(1))
+        self.register_buffer('image_std', torch.tensor(
+            cfg.IMAGE.IMAGENET_STD).unsqueeze(1).unsqueeze(1))
 
     def augmentation(self, batch: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
         batch = self.pixel_augmentation(batch)
@@ -48,8 +50,9 @@ class PreProcess(nn.Module):
             # Mask bird's-eye view label pixels that are not visible from the input image
             batch['birdview_label'][:, :, :, self.bev_out_of_view_mask] = 0
 
-            # Currently the frustum pooling is set up such that the bev features are rotated by 90 degrees clockwise
-            batch['birdview_label'] = torch.rot90(batch['birdview_label'], k=-1, dims=[3, 4]).contiguous()
+            #  Currently the frustum pooling is set up such that the bev features are rotated by 90 degrees clockwise
+            batch['birdview_label'] = torch.rot90(
+                batch['birdview_label'], k=-1, dims=[3, 4]).contiguous()
 
             # Compute labels at half, quarter, and 1/8th resolution
             batch['birdview_label_1'] = batch['birdview_label']
@@ -65,7 +68,8 @@ class PreProcess(nn.Module):
             # Mask elements not visible from the input image
             batch['instance_label'][:, :, :, self.bev_out_of_view_mask] = 0
             #  Currently the frustum pooling is set up such that the bev features are rotated by 90 degrees clockwise
-            batch['instance_label'] = torch.rot90(batch['instance_label'], k=-1, dims=[3, 4]).contiguous()
+            batch['instance_label'] = torch.rot90(
+                batch['instance_label'], k=-1, dims=[3, 4]).contiguous()
 
             center_label, offset_label = convert_instance_mask_to_center_and_offset_label(
                 batch['instance_label'], ignore_index=self.ignore_index, sigma=self.center_sigma,
@@ -109,15 +113,18 @@ class PreProcess(nn.Module):
         return batch
 
     def forward(self, batch: Dict[str, torch.Tensor]):
-        # Normalise from [0, 255] to [0, 1]
+        #  Normalise from [0, 255] to [0, 1]
+        print("batch: {}".format(batch))
         batch['image'] = batch['image'].float() / 255
 
         if 'route_map' in batch:
             batch['route_map'] = batch['route_map'].float() / 255
-            batch['route_map'] = functional_resize(batch['route_map'], size=(self.route_map_size, self.route_map_size))
+            batch['route_map'] = functional_resize(
+                batch['route_map'], size=(self.route_map_size, self.route_map_size))
         batch = functional_crop(batch, self.crop)
         if self.cfg.EVAL.RESOLUTION.ENABLED:
-            batch = functional_resize_batch(batch, scale=1/self.cfg.EVAL.RESOLUTION.FACTOR)
+            batch = functional_resize_batch(
+                batch, scale=1/self.cfg.EVAL.RESOLUTION.FACTOR)
 
         batch = self.prepare_bev_labels(batch)
 
@@ -127,10 +134,12 @@ class PreProcess(nn.Module):
         # Use imagenet mean and std normalisation, because we're loading pretrained backbones
         batch['image'] = (batch['image'] - self.image_mean) / self.image_std
         if 'route_map' in batch:
-            batch['route_map'] = (batch['route_map'] - self.image_mean) / self.image_std
+            batch['route_map'] = (batch['route_map'] -
+                                  self.image_mean) / self.image_std
 
         if 'depth' in batch:
-            batch['depth_mask'] = (batch['depth'] > self.min_depth) & (batch['depth'] < self.max_depth)
+            batch['depth_mask'] = (batch['depth'] > self.min_depth) & (
+                batch['depth'] < self.max_depth)
 
         return batch
 
@@ -206,11 +215,14 @@ class PixelAugmentation(nn.Module):
                 # random blur
                 rand_value = torch.rand(1)
                 if rand_value < self.blur_prob:
-                    std = torch.empty(1).uniform_(self.blur_std[0], self.blur_std[1]).item()
-                    image[i, j] = tvf.gaussian_blur(image[i, j], self.blur_window, std)
+                    std = torch.empty(1).uniform_(
+                        self.blur_std[0], self.blur_std[1]).item()
+                    image[i, j] = tvf.gaussian_blur(
+                        image[i, j], self.blur_window, std)
                 # random sharpen
                 elif rand_value < self.blur_prob + self.sharpen_prob:
-                    factor = torch.empty(1).uniform_(self.sharpen_factor[0], self.sharpen_factor[1]).item()
+                    factor = torch.empty(1).uniform_(
+                        self.sharpen_factor[0], self.sharpen_factor[1]).item()
                     image[i, j] = tvf.adjust_sharpness(image[i, j], factor)
 
                 # random color jitter
@@ -228,9 +240,12 @@ class RouteAugmentation(nn.Module):
         self.drop = drop  # random dropout of map
         self.end_of_route = end_of_route  # probability of end of route augmentation
         self.small_rotation = small_rotation  # probability of doing small rotation
-        self.large_rotation = large_rotation  # probability of doing large rotation (arbitrary orientation)
-        self.small_perturbation = transforms.RandomAffine(degrees, translate, scale, shear)  # small rotation
-        self.large_perturbation = transforms.RandomAffine(180, translate, scale, shear)  # arbitrary orientation
+        # probability of doing large rotation (arbitrary orientation)
+        self.large_rotation = large_rotation
+        self.small_perturbation = transforms.RandomAffine(
+            degrees, translate, scale, shear)  # small rotation
+        self.large_perturbation = transforms.RandomAffine(
+            180, translate, scale, shear)  # arbitrary orientation
 
     def forward(self, batch):
         if 'route_map' in batch:

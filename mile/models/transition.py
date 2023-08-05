@@ -10,7 +10,7 @@ class RepresentationModel(nn.Module):
 
         self.module = nn.Sequential(
             nn.Linear(in_channels, in_channels),
-            nn.LeakyReLU(True),
+            nn.LeakyReLU(),
             nn.Linear(in_channels, 2*self.latent_dim),
         )
 
@@ -44,7 +44,7 @@ class RSSM(nn.Module):
         # Map input of the gru to a space with easier temporal dynamics
         self.pre_gru_net = nn.Sequential(
             nn.Linear(state_dim, hidden_state_dim),
-            nn.LeakyReLU(True),
+            nn.LeakyReLU(),
         )
 
         self.recurrent_model = nn.GRUCell(
@@ -55,7 +55,7 @@ class RSSM(nn.Module):
         # Map action to a higher dimensional input
         self.posterior_action_module = nn.Sequential(
             nn.Linear(action_dim, self.action_latent_dim),
-            nn.LeakyReLU(True),
+            nn.LeakyReLU(),
         )
 
         self.posterior = RepresentationModel(
@@ -66,9 +66,10 @@ class RSSM(nn.Module):
         # Map action to a higher dimensional input
         self.prior_action_module = nn.Sequential(
             nn.Linear(action_dim, self.action_latent_dim),
-            nn.LeakyReLU(True),
+            nn.LeakyReLU(),
         )
-        self.prior = RepresentationModel(in_channels=hidden_state_dim + self.action_latent_dim, latent_dim=state_dim)
+        self.prior = RepresentationModel(
+            in_channels=hidden_state_dim + self.action_latent_dim, latent_dim=state_dim)
         self.active_inference = False
         if self.active_inference:
             print('ACTIVE INFERENCE!!')
@@ -101,7 +102,7 @@ class RSSM(nn.Module):
             'posterior': [],
         }
 
-        # Initialisation
+        #  Initialisation
         batch_size, sequence_length, _ = input_embedding.shape
         h_t = input_embedding.new_zeros((batch_size, self.hidden_state_dim))
         sample_t = input_embedding.new_zeros((batch_size, self.state_dim))
@@ -111,11 +112,13 @@ class RSSM(nn.Module):
             else:
                 action_t = action[:, t-1]
             output_t = self.observe_step(
-                h_t, sample_t, action_t, input_embedding[:, t], use_sample=use_sample, policy=policy,
+                h_t, sample_t, action_t, input_embedding[:,
+                                                         t], use_sample=use_sample, policy=policy,
             )
             # During training sample from the posterior, except when using dropout
             # always use posterior for the first frame
-            use_prior = self.training and self.use_dropout and torch.rand(1).item() < self.dropout_probability and t > 0
+            use_prior = self.training and self.use_dropout and torch.rand(
+                1).item() < self.dropout_probability and t > 0
 
             if use_prior:
                 sample_t = output_t['prior']['sample']
@@ -130,14 +133,17 @@ class RSSM(nn.Module):
         return output
 
     def observe_step(self, h_t, sample_t, action_t, embedding_t, use_sample=True, policy=None):
-        imagine_output = self.imagine_step(h_t, sample_t, action_t, use_sample, policy=policy)
+        imagine_output = self.imagine_step(
+            h_t, sample_t, action_t, use_sample, policy=policy)
 
         latent_action_t = self.posterior_action_module(action_t)
         posterior_mu_t, posterior_sigma_t = self.posterior(
-            torch.cat([imagine_output['hidden_state'], embedding_t, latent_action_t], dim=-1)
+            torch.cat([imagine_output['hidden_state'],
+                      embedding_t, latent_action_t], dim=-1)
         )
 
-        sample_t = self.sample_from_distribution(posterior_mu_t, posterior_sigma_t, use_sample=use_sample)
+        sample_t = self.sample_from_distribution(
+            posterior_mu_t, posterior_sigma_t, use_sample=use_sample)
 
         posterior_output = {
             'hidden_state': imagine_output['hidden_state'],
@@ -162,8 +168,10 @@ class RSSM(nn.Module):
 
         input_t = self.pre_gru_net(sample_t)
         h_t = self.recurrent_model(input_t, h_t)
-        prior_mu_t, prior_sigma_t = self.prior(torch.cat([h_t, latent_action_t], dim=-1))
-        sample_t = self.sample_from_distribution(prior_mu_t, prior_sigma_t, use_sample=use_sample)
+        prior_mu_t, prior_sigma_t = self.prior(
+            torch.cat([h_t, latent_action_t], dim=-1))
+        sample_t = self.sample_from_distribution(
+            prior_mu_t, prior_sigma_t, use_sample=use_sample)
         imagine_output = {
             'hidden_state': h_t,
             'sample': sample_t,
@@ -187,5 +195,6 @@ class RSSM(nn.Module):
             if len(outter_value) > 0:
                 new_output[outter_key] = dict()
                 for inner_key in outter_value[0].keys():
-                    new_output[outter_key][inner_key] = torch.stack([x[inner_key] for x in outter_value], dim=dim)
+                    new_output[outter_key][inner_key] = torch.stack(
+                        [x[inner_key] for x in outter_value], dim=dim)
         return new_output

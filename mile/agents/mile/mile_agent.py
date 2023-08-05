@@ -13,6 +13,8 @@ from mile.constants import CARLA_FPS, DISPLAY_SEGMENTATION
 from mile.data.dataset import calculate_geometry_from_config
 from mile.data.dataset_utils import preprocess_birdview_and_routemap, preprocess_measurements, calculate_birdview_labels
 from mile.trainer import WorldModelTrainer
+import torch.onnx
+from torchviz import make_dot
 
 
 class MileAgent:
@@ -26,6 +28,10 @@ class MileAgent:
         self.metrics_avg_time = 0.0
         self.render_avg_time = 0.0
         self.inference_counter = 0
+        self.export_onnx = False
+        self.export_torchvis = True
+        self.export_onnx_done = False
+        self.export_torchvis_done = False
 
     def setup(self, path_to_conf_file):
         cfg = OmegaConf.load(path_to_conf_file)
@@ -93,6 +99,7 @@ class MileAgent:
     def run_step(self, input_data, timestamp):
         start_time = time.time()
         policy_input = self.preprocess_data(input_data)
+        print("policy_input: {}".format(policy_input))
         end_time = time.time()
         execution_time = end_time - start_time
         if self.inference_counter > 50:
@@ -101,6 +108,25 @@ class MileAgent:
                 self.preprocess_avg_time * self.inference_counter + execution_time) / (self.inference_counter + 1)
             print("--- AVG Preprocess time %s seconds ---" %
                   (self.preprocess_avg_time))
+
+        if self.export_onnx and self.export_onnx_done == False:
+            torch.onnx.export(self._policy,         # model being run
+                              # model input (or a tuple for multiple inputs)
+                              policy_input,
+                              "mile.onnx",       # where to save the model
+                              export_params=True,  # store the trained parameter weights inside the model file
+                              opset_version=11,    # the ONNX version to export the model to
+                              verbose=True,  # whether to execute constant folding for optimization
+                              # the model's input names
+                              input_names=['modelInput'],
+                              # the model's output names
+                              output_names=['modelOutput'],
+                              dynamic_axes={'modelInput': {0: 'batch'}, 'modelOutput': {0: 'batch'}})
+            print(" ")
+            print('Model has been converted to ONNX')
+
+            self.export_onnx_done = True
+
         # Forward pass
         with torch.no_grad():
             is_dreaming = False
@@ -121,6 +147,12 @@ class MileAgent:
             else:
                 print("Skipping frame %s" % (self.inference_counter))
 
+        if self.export_torchvis and self.export_torchvis_done == False:
+            make_dot(output, params=dict(self._policy.named_parameters())
+                     ).render("rnn_torchviz", format="png")
+            print(" ")
+            print('Model has been converted to Torchviz')
+            self.export_torchvis_done = True
         start_time = time.time()
         actions = torch.cat(
             [output['throttle_brake'], output['steering']], dim=-1)[0, 0].cpu().numpy()
