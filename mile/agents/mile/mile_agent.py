@@ -32,7 +32,7 @@ class MileAgent:
         self.export_torchvis = False
         self.export_onnx_done = False
         self.export_torchvis_done = False
-        self.print_stats = False
+        self.print_stats = True
 
     def setup(self, path_to_conf_file):
         cfg = OmegaConf.load(path_to_conf_file)
@@ -112,24 +112,6 @@ class MileAgent:
                 print("--- AVG Preprocess time %s seconds ---" %
                       (self.preprocess_avg_time))
 
-        if self.export_onnx and self.export_onnx_done == False:
-            torch.onnx.export(self._policy,         # model being run
-                              # model input (or a tuple for multiple inputs)
-                              policy_input,
-                              "mile.onnx",       # where to save the model
-                              export_params=True,  # store the trained parameter weights inside the model file
-                              opset_version=11,    # the ONNX version to export the model to
-                              verbose=True,  # whether to execute constant folding for optimization
-                              # the model's input names
-                              input_names=['modelInput'],
-                              # the model's output names
-                              output_names=['modelOutput'],
-                              dynamic_axes={'modelInput': {0: 'batch'}, 'modelOutput': {0: 'batch'}})
-            print(" ")
-            print('Model has been converted to ONNX')
-
-            self.export_onnx_done = True
-
         # Forward pass
         with torch.no_grad():
             is_dreaming = False
@@ -137,6 +119,24 @@ class MileAgent:
             if self.cfg['online_deployment']:
                 # Move self._policy.preprocess from forward/deployment_forward
                 batch = self._policy.preprocess(policy_input)
+
+                if self.export_onnx and self.export_onnx_done == False:
+                    torch.onnx.export(self._policy,         # model being run
+                                      # model input (or a tuple for multiple inputs)
+                                      batch,
+                                      "mile.onnx",       # where to save the model
+                                      export_params=True,  # store the trained parameter weights inside the model file
+                                      opset_version=11,    # the ONNX version to export the model to
+                                      verbose=True,  # whether to execute constant folding for optimization
+                                      # the model's input names
+                                      input_names=['modelInput'],
+                                      # the model's output names
+                                      output_names=['modelOutput'],
+                                      dynamic_axes={'modelInput': {0: 'batch'}, 'modelOutput': {0: 'batch'}})
+                    print(" ")
+                    print('Model has been converted to ONNX')
+                    self.export_onnx_done = True
+
                 output = self._policy.deployment_forward(
                     batch, is_dreaming=is_dreaming)
             else:

@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 import timm
+import time
 
 from mile.constants import CARLA_FPS, DISPLAY_SEGMENTATION
 from mile.utils.network_utils import pack_sequence_dim, unpack_sequence_dim, remove_past
@@ -15,6 +16,12 @@ class Mile(nn.Module):
         super().__init__()
         self.cfg = cfg
         self.receptive_field = cfg.RECEPTIVE_FIELD
+        self.encoding_avg_time = 0.0
+        self.rssm_avg_time = 0.0
+        self.policy_avg_time = 0.0
+        self.bevdecoder_avg_time = 0.0
+        self.inference_counter = 0
+        self.print_stats = True
 
         # Image feature encoder
         if self.cfg.MODEL.ENCODER.NAME == 'resnet18':
@@ -424,15 +431,30 @@ class Mile(nn.Module):
         """
         assert self.cfg.MODEL.TRANSITION.ENABLED
         b = batch['image'].shape[0]
-
         if self.count == 0:
             # Encode RGB images, route_map, speed using intrinsics and extrinsics
             # to a 512 dimensional vector
             s = batch['image'].shape[1]
+            print("when self.count == 0, b: {}, s: {}".format(b, s))
             action_t = batch['action'][:, -2]  # action from t-1 to t
+
+            # Encoding
+            start_time = time.time()
+
             batch = remove_past(batch, s)
             embedding_t = self.encode(batch)[:, -1]  # dim (b, 1, 512)
 
+            end_time = time.time()
+            execution_time = end_time - start_time
+            if self.inference_counter > 50:
+                if self.print_stats:
+                    print("\t--- Encoding time %s seconds ---" %
+                          (execution_time))
+                self.encoding_avg_time = (
+                    self.encoding_avg_time * self.inference_counter + execution_time) / (self.inference_counter + 1)
+                if self.print_stats:
+                    print("\t--- AVG Encoding time %s seconds ---" %
+                          (self.encoding_avg_time))
             # Recurrent state sequence module
             if self.last_h is None:
                 h_t = action_t.new_zeros(
@@ -443,6 +465,8 @@ class Mile(nn.Module):
                 h_t = self.last_h
                 sample_t = self.last_sample
 
+            # rssm
+            start_time = time.time()
             if is_dreaming:
                 rssm_output = self.rssm.imagine_step(
                     h_t, sample_t, action_t, use_sample=False, policy=self.policy,
@@ -451,6 +475,17 @@ class Mile(nn.Module):
                 rssm_output = self.rssm.observe_step(
                     h_t, sample_t, action_t, embedding_t, use_sample=False, policy=self.policy,
                 )['posterior']
+            end_time = time.time()
+            execution_time = end_time - start_time
+            if self.inference_counter > 50:
+                if self.print_stats:
+                    print("\t--- RSSM time %s seconds ---" %
+                          (execution_time))
+                self.rssm_avg_time = (
+                    self.rssm_avg_time * self.inference_counter + execution_time) / (self.inference_counter + 1)
+                if self.print_stats:
+                    print("\t--- AVG RSSM time %s seconds ---" %
+                          (self.rssm_avg_time))
             sample_t = rssm_output['sample']
             h_t = rssm_output['hidden_state']
 
@@ -460,12 +495,31 @@ class Mile(nn.Module):
             game_frequency = CARLA_FPS
             model_stride_sec = self.cfg.DATASET.STRIDE_SEC
             n_image_per_stride = int(game_frequency * model_stride_sec)
+            print("game_frequency: {}, model_stride_sec: {}, n_image_per_stride: {}".format(
+                game_frequency, model_stride_sec, n_image_per_stride))
             self.count = n_image_per_stride - 1
         else:
+            print("self.count: {}".format(self.count))
             self.count -= 1
         s = 1
+
+        # Policy
+        start_time = time.time()
+
         state = torch.cat([self.last_h, self.last_sample], dim=-1)
         output_policy = self.policy(state)
+
+        end_time = time.time()
+        execution_time = end_time - start_time
+        if self.inference_counter > 50:
+            if self.print_stats:
+                print("\t--- Policy time %s seconds ---" %
+                      (execution_time))
+            self.policy_avg_time = (
+                self.policy_avg_time * self.inference_counter + execution_time) / (self.inference_counter + 1)
+            if self.print_stats:
+                print("\t--- AVG Policy time %s seconds ---" %
+                      (self.policy_avg_time))
         throttle_brake, steering = torch.split(output_policy, 1, dim=-1)
         output = dict()
         output['throttle_brake'] = unpack_sequence_dim(throttle_brake, b, s)
@@ -475,8 +529,24 @@ class Mile(nn.Module):
         output['sample'] = self.last_sample
 
         if self.cfg.SEMANTIC_SEG.ENABLED and DISPLAY_SEGMENTATION:
+            start_time = time.time()
+
             bev_decoder_output = self.bev_decoder(state)
             bev_decoder_output = unpack_sequence_dim(bev_decoder_output, b, s)
             output = {**output, **bev_decoder_output}
+
+            end_time = time.time()
+            execution_time = end_time - start_time
+            if self.inference_counter > 50:
+                if self.print_stats:
+                    print("\t--- BEV Decoder time %s seconds ---" %
+                          (execution_time))
+                self.bevdecoder_avg_time = (
+                    self.bevdecoder_avg_time * self.inference_counter + execution_time) / (self.inference_counter + 1)
+                if self.print_stats:
+                    print("\t--- AVG BEV Decoder time %s seconds ---" %
+                          (self.bevdecoder_avg_time))
+
+        self.inference_counter += 1
 
         return output
