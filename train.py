@@ -41,7 +41,7 @@ def main():
         SaveGitDiffHashCallback(),
         pl.callbacks.LearningRateMonitor(),
         ModelCheckpoint(
-            save_dir, every_n_train_steps=cfg.VAL_CHECK_INTERVAL,
+            save_dir, every_n_train_steps=cfg.VAL_CHECK_INTERVAL, save_top_k=3, monitor="val_loss", filename="{epoch}-{step}-{val_loss:.2f}"
         ),
     ]
 
