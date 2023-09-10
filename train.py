@@ -41,7 +41,7 @@ def main():
         SaveGitDiffHashCallback(),
         pl.callbacks.LearningRateMonitor(),
         ModelCheckpoint(
-            save_dir, every_n_train_steps=cfg.VAL_CHECK_INTERVAL, filename="{epoch}-{step}-{val_throttle_brake:.2f}-{val_steering:.2f}-{val_probabilistic:.2f}-{val_bev_segmentation_1:.2f}-{val_bev_center_1:.2f}-{val_bev_segmentation_2:.2f}"
+            save_dir, every_n_train_steps=cfg.VAL_CHECK_INTERVAL, filename="{epoch}-{step}-{val_throttle_brake:.2f}-{val_steering:.2f}-{val_probabilistic:.2f}-{val_bev_segmentation_1:.2f}-{val_bev_center_1:.2f}-{val_bev_offset_1:.2f}-{val_loss:.4f}", save_top_k=3, monitor="val_loss", mode="min"
         ),
     ]
 

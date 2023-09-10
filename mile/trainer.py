@@ -156,7 +156,9 @@ class WorldModelTrainer(pl.LightningModule):
         self.log('-global_step', -self.global_step)
         for key, value in loss.items():
             self.log(f'{prefix}_{key}', value)
-
+        total_loss = sum([x for x in loss.values()])
+        self.log(f'{prefix}_loss', total_loss)
+        
         # Visualisation
         if prefix == 'train':
             visualisation_criteria = self.global_step % self.cfg.VAL_CHECK_INTERVAL == 0

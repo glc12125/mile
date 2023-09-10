@@ -9,8 +9,11 @@ BATCHSIZE: 2
 STEPS: 8
 LOGGING_INTERVAL: 2
 VAL_CHECK_INTERVAL: 4
-LIMIT_VAL_BATCHES: 2
+LIMIT_VAL_BATCHES: 2.0
 N_WORKERS: 0
 
 DATASET:
   VERSION: 'mini'
+
+PRETRAINED:
+  PATH: '/home/dev/mile/epoch=0-step=20000-val_throttle_brake=0.12-val_steering=0.01-val_probabilistic=0.02-val_bev_segmentation_1=0.11-val_bev_center_1=0.06-val_bev_segmentation_2=0.05.ckpt'

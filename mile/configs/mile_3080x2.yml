@@ -3,11 +3,11 @@ LOG_DIR: 'tensorboard_logs'
 
 GPUS: 2
 BATCHSIZE: 2
-STEPS: 200000
-LIMIT_TRAIN_BATCHES: 0.125
-LIMIT_VAL_BATCHES: 0.125
+STEPS: 50000
+LIMIT_TRAIN_BATCHES: 0.135
+LIMIT_VAL_BATCHES: 0.13
 N_WORKERS: 1
-VAL_CHECK_INTERVAL: 10000
+VAL_CHECK_INTERVAL: 5000
 
 OPTIMIZER:
   ACCUMULATE_GRAD_BATCHES: 2
@@ -16,7 +16,7 @@ RECEPTIVE_FIELD: 6
 FUTURE_HORIZON: 6
 
 PRETRAINED:
-  PATH: ''
+  PATH: '/home/dev/mile/epoch=0-step=20000-val_throttle_brake=0.12-val_steering=0.01-val_probabilistic=0.02-val_bev_segmentation_1=0.11-val_bev_center_1=0.06-val_bev_segmentation_2=0.05.ckpt'
 
 DATASET:
   DATAROOT: ''
