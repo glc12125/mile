@@ -9,6 +9,7 @@ from omegaconf import DictConfig, OmegaConf
 import logging
 import os.path
 import sys
+from pprint import pprint
 from time import time
 
 from gym.wrappers.monitoring.video_recorder import ImageEncoder
@@ -38,14 +39,40 @@ def run_single(run_name, env, agents_dict, agents_log_dir, log_video, max_step=N
 
     counter = 0
     warm_start = 25
-
+    model_inference_avg_time = 0
+    env_step_avg_time = 0
+    render_stats_process_avg_time = 0
+    end_to_end_start_time = 0
+    end_to_end_end_time = 0
+    end_to_end_avg_time = 0
     while not done['__all__']:
+        end_to_end_start_time = time()
+        start_time = end_to_end_start_time
         control_dict = {}
         for actor_id, agent in agents_dict.items():
             control_dict[actor_id] = agent.run_step(obs[actor_id], timestamp)
 
-        obs, reward, done, info = env.step(control_dict)
+        end_time = time()
+        execution_time = end_time - start_time
+        if counter >= warm_start:
+            print("--- Model inference time %s seconds ---" % (execution_time))
+            model_inference_avg_time = (
+                model_inference_avg_time * counter + execution_time) / (counter + 1)
+            print("--- AVG Model inference time %s seconds ---" %
+                  (model_inference_avg_time))
 
+        start_time = time()
+        obs, reward, done, info = env.step(control_dict)
+        end_time = time()
+        execution_time = end_time - start_time
+        if counter >= warm_start:
+            print("--- Env step time %s seconds ---" % (execution_time))
+            env_step_avg_time = (
+                env_step_avg_time * counter + execution_time) / (counter + 1)
+            print("--- AVG Env step time %s seconds ---" %
+                  (env_step_avg_time))
+
+        start_time = time()
         render_imgs = []
         for actor_id, agent in agents_dict.items():
             if log_video:
@@ -56,9 +83,18 @@ def run_single(run_name, env, agents_dict, agents_log_dir, log_video, max_step=N
                 ep_event_dict[actor_id] = info[actor_id]['episode_event']
 
                 # Add intersection-over-union metrics
-                custom_metrics = agent.compute_metrics()
-                ep_stat_dict[actor_id] = {
-                    **ep_stat_dict[actor_id], **custom_metrics}
+                # custom_metrics = agent.compute_metrics()
+                # ep_stat_dict[actor_id] = {
+                #    **ep_stat_dict[actor_id], **custom_metrics}
+        end_time = time()
+        execution_time = end_time - start_time
+        if counter >= warm_start:
+            print("--- Render&Stats process time %s seconds ---" %
+                  (execution_time))
+            render_stats_process_avg_time = (
+                render_stats_process_avg_time * counter + execution_time) / (counter + 1)
+            print("--- AVG Render&Stats process time %s seconds ---" %
+                  (render_stats_process_avg_time))
 
         if len(list_render) > 15000:
             del list_render[0]
@@ -69,6 +105,14 @@ def run_single(run_name, env, agents_dict, agents_log_dir, log_video, max_step=N
         if max_step and timestamp['step'] > max_step:
             break
 
+        end_to_end_end_time = time()
+        execution_time = end_to_end_end_time - end_to_end_start_time
+        if counter >= warm_start:
+            print("--- End to end time %s seconds ---" % (execution_time))
+            end_to_end_avg_time = (
+                end_to_end_avg_time * counter + execution_time) / (counter + 1)
+            print("--- AVG end to end time %s seconds ---" %
+                  (end_to_end_avg_time))
         counter += 1
         if counter == warm_start:
             t0 = time()
@@ -96,10 +140,108 @@ def main(cfg: DictConfig):
     reward_configs = {}
     terminal_configs = {}
     agent_names = []
-    print("cfg: {}".format(cfg))
+    print("cfg:")
+    pprint(cfg)
+    '''
+    {
+   "test_suites":[
+      {
+         "env_id":"LeaderBoard-v0",
+         "env_configs":{
+            "carla_map":"Town02",
+            "routes_group":"None",
+            "weather_group":"new"
+         }
+      },
+      {
+         "env_id":"LeaderBoard-v0",
+         "env_configs":{
+            "carla_map":"Town05",
+            "routes_group":"None",
+            "weather_group":"new"
+         }
+      }
+   ],
+   "agent":{
+      "mile":{
+         "obs_configs":{
+            "speed":{
+               "module":"actor_state.speed"
+            },
+            "gnss":{
+               "module":"navigation.gnss"
+            },
+            "central_rgb":{
+               "module":"camera.rgb",
+               "fov":100,
+               "width":960,
+               "height":600,
+               "location":[
+                  -1.5,
+                  0.0,
+                  2.0
+               ],
+               "rotation":[
+                  0.0,
+                  0.0,
+                  0.0
+               ]
+            },
+            "route_plan":{
+               "module":"navigation.waypoint_plan",
+               "steps":20
+            },
+            "birdview":{
+               "module":"birdview.chauffeurnet",
+               "width_in_pixels":192,
+               "pixels_ev_to_bottom":32,
+               "pixels_per_meter":5.0,
+               "history_idx":[
+                  -16,
+                  -11,
+                  -6,
+                  -1
+               ],
+               "scale_bbox":true,
+               "scale_mask_col":1.0
+            }
+         },
+         "entry_point":"agents.mile.mile_agent:MileAgent",
+         "ckpt":"/home/Development/mile/mile.ckpt",
+         "online_deployment":true,
+         "env_wrapper":{
+            "entry_point":"agents.mile.mile_wrapper:MileWrapper"
+         }
+      }
+   },
+   "carla_sh_path":"/root/media/crucial/carla/CARLA_0.9.11/CarlaUE4.sh",
+   "port":2000,
+   "log_level":"INFO",
+   "host":"localhost",
+   "seed":2021,
+   "no_rendering":false,
+   "kill_running":true,
+   "resume":true,
+   "wb_project":"mile",
+   "wb_group":"evaluation",
+   "wb_tags":"None",
+   "log_video":true,
+   "actors":{
+      "hero":{
+         "agent":"mile",
+         "reward":{
+            "entry_point":"reward.valeo_action:ValeoAction"
+         },
+         "terminal":{
+            "entry_point":"terminal.leaderboard:Leaderboard"
+         }
+      }
+   }
+}
+    '''
     for ev_id, ev_cfg in cfg.actors.items():
         agent_names.append(ev_cfg.agent)
-        print("ev_id: {}, ev_cfg: {}".format(ev_id, ev_cfg))
+        pprint("ev_id: {}, ev_cfg: {}".format(ev_id, ev_cfg))
         cfg_agent = cfg.agent[ev_cfg.agent]
         OmegaConf.save(config=cfg_agent, f='config_agent.yaml')
         AgentClass = config_utils.load_entry_point(cfg_agent.entry_point)
@@ -113,14 +255,7 @@ def main(cfg: DictConfig):
     # check h5 birdview maps have been generated
     config_utils.check_h5_maps(cfg.test_suites, obs_configs, cfg.carla_sh_path)
 
-    # resume env_idx from checkpoint.txt
-    last_checkpoint_path = f'{hydra.utils.get_original_cwd()}/outputs/port_{cfg.port}_checkpoint.txt'
-    if cfg.resume and os.path.isfile(last_checkpoint_path):
-        with open(last_checkpoint_path, 'r') as f:
-            env_idx = int(f.read())
-        log.info(f'Resume from env_idx {env_idx}')
-    else:
-        env_idx = 0
+    env_idx = 0
 
     # This is used when resuming benchmarking to indicate that all scenarios were evaluated.
     if env_idx >= len(cfg.test_suites):
@@ -128,19 +263,13 @@ def main(cfg: DictConfig):
         server_manager.stop()
         return
 
-    # resume task_idx from ep_stat_buffer_{env_idx}.json
-    ep_state_buffer_json = f'{hydra.utils.get_original_cwd()}/outputs/port_{cfg.port}_ep_stat_buffer_{env_idx}.json'
-    if cfg.resume and os.path.isfile(ep_state_buffer_json):
-        ep_stat_buffer = json.load(open(ep_state_buffer_json, 'r'))
-        ckpt_task_idx = len(ep_stat_buffer['hero'])
-        log.info(f'Resume from task_idx {ckpt_task_idx}')
-    else:
-        ckpt_task_idx = 0
-        ep_stat_buffer = {}
-        for actor_id in agents_dict.keys():
-            ep_stat_buffer[actor_id] = []
-        log.info(f'Start new env from task_idx {ckpt_task_idx}')
+    ckpt_task_idx = 0
+    ep_stat_buffer = {}
+    for actor_id in agents_dict.keys():
+        ep_stat_buffer[actor_id] = []
+    log.info(f'Start new env from task_idx {ckpt_task_idx}')
 
+    ep_state_buffer_json = f'{hydra.utils.get_original_cwd()}/outputs/port_{cfg.port}_ep_stat_buffer_{env_idx}.json'
     # compose suite_name
     env_setup = OmegaConf.to_container(cfg.test_suites[env_idx])
     suite_name = '-'.join(agent_names) + '_' + env_setup['env_id']
@@ -165,14 +294,44 @@ def main(cfg: DictConfig):
                    terminal_configs=terminal_configs, host=cfg.host, port=cfg.port,
                    seed=cfg.seed, no_rendering=cfg.no_rendering, **env_setup['env_configs'])
 
-    # init wandb
-    wandb.init(project=cfg.wb_project, name=suite_name,
-               group=cfg.wb_group, tags=cfg.wb_tags)
-    wandb.config.update(OmegaConf.to_container(cfg))
-    wandb.save('./config_agent.yaml')
+    print("There are {} tasks in env {}".format(
+        env.num_tasks, env_setup['env_id']))
+    if cfg.mode == 'all':
+        # loop through each route
+        for task_idx in range(ckpt_task_idx, env.num_tasks):
+            env.set_task_idx(task_idx)
+            run_name = f"{env.task['weather']}_{env.task['route_id']:02d}"
 
-    # loop through each route
-    for task_idx in range(ckpt_task_idx, env.num_tasks):
+            list_render, ep_stat_dict, ep_event_dict, timestamp = run_single(
+                run_name, env, agents_dict, agents_log_dir, cfg.log_video)
+            # log video
+            if cfg.log_video:
+                video_path = (video_dir / f'{run_name}.mp4').as_posix()
+                encoder = ImageEncoder(
+                    video_path, list_render[0].shape, 2*CARLA_FPS, 2*CARLA_FPS)
+                for im in list_render:
+                    encoder.capture_frame(im)
+                encoder.close()
+                encoder = None
+
+            # dump events
+            diags_json_path = (
+                diags_dir / f'{task_idx:03}_{run_name}.json').as_posix()
+            with open(diags_json_path, 'w') as fd:
+                json.dump(ep_event_dict, fd, indent=4, sort_keys=False)
+
+            # save statistics
+            for actor_id, ep_stat in ep_stat_dict.items():
+                ep_stat_buffer[actor_id].append(ep_stat)
+
+            with open(ep_state_buffer_json, 'w') as fd:
+                json.dump(ep_stat_buffer, fd, indent=4, sort_keys=True)
+            # clean up
+            list_render.clear()
+            ep_stat_dict = None
+            ep_event_dict = None
+    elif cfg.mode == 'single':
+        task_idx = 0
         env.set_task_idx(task_idx)
         run_name = f"{env.task['weather']}_{env.task['route_id']:02d}"
 
@@ -187,8 +346,6 @@ def main(cfg: DictConfig):
                 encoder.capture_frame(im)
             encoder.close()
             encoder = None
-            wandb.log(
-                {f'video/{task_idx}-{run_name}': wandb.Video(video_path)}, step=task_idx)
 
         # dump events
         diags_json_path = (
@@ -196,31 +353,16 @@ def main(cfg: DictConfig):
         with open(diags_json_path, 'w') as fd:
             json.dump(ep_event_dict, fd, indent=4, sort_keys=False)
 
-        # save diags and agents_log
-        wandb.save(diags_json_path)
-
-        # save time
-        wandb.log({'time/total_step': timestamp['step'],
-                   'time/fps':  timestamp['step'] / timestamp['relative_wall_time']
-                   }, step=task_idx)
-
         # save statistics
         for actor_id, ep_stat in ep_stat_dict.items():
             ep_stat_buffer[actor_id].append(ep_stat)
-            log_dict = {}
-            for k, v in ep_stat.items():
-                k_actor = f'{actor_id}/{k}'
-                log_dict[k_actor] = v
-            wandb.log(log_dict, step=task_idx)
 
         with open(ep_state_buffer_json, 'w') as fd:
             json.dump(ep_stat_buffer, fd, indent=4, sort_keys=True)
-        wandb.save(ep_state_buffer_json)
         # clean up
         list_render.clear()
         ep_stat_dict = None
         ep_event_dict = None
-
     # close env
     env.close()
     env = None
@@ -236,14 +378,6 @@ def main(cfg: DictConfig):
             ep_stat_keys = list(avg_ep_stat.keys())
         data += [f'{avg_ep_stat[k]:.4f}' for k in ep_stat_keys]
         table_data.append(data)
-
-    # Save all run statistics
-    table_columns = ['Suite', 'actor_id', 'n_episode'] + ep_stat_keys
-    wandb.log(
-        {'table/summary': wandb.Table(data=table_data, columns=table_columns)})
-
-    with open(last_checkpoint_path, 'w') as f:
-        f.write(f'{env_idx+1}')
 
     log.info(
         f"Finished Benchmarking env_idx {env_idx}, suite_name: {suite_name}")

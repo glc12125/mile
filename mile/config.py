@@ -26,6 +26,7 @@ class CfgNode(_CfgNode):
     def convert_to_dict(self):
         return convert_to_dict(self)
 
+
 CN = CfgNode
 
 _C = CN()
@@ -64,8 +65,10 @@ _C.DATASET = CN()
 _C.DATASET.DATAROOT = ''
 _C.DATASET.VERSION = 'trainval'
 _C.DATASET.STRIDE_SEC = 0.2  # stride between two frames
-_C.DATASET.FILTER_BEGINNING_OF_RUN_SEC = 1.0  # in seconds. the beginning of the run is stationary.
-_C.DATASET.FILTER_NORM_REWARD = 0.6  # filter runs that have a normalised reward below this value.
+# in seconds. the beginning of the run is stationary.
+_C.DATASET.FILTER_BEGINNING_OF_RUN_SEC = 1.0
+# filter runs that have a normalised reward below this value.
+_C.DATASET.FILTER_NORM_REWARD = 0.6
 
 
 #############
@@ -97,9 +100,11 @@ _C.IMAGE.AUGMENTATION.COLOR_JITTER_SATURATION = .3
 _C.IMAGE.AUGMENTATION.COLOR_JITTER_HUE = .1
 
 _C.BEV = CN()
-_C.BEV.SIZE = [192, 192]  # width, height. note that the bev is rotated, so width corresponds to forward direction.
+# width, height. note that the bev is rotated, so width corresponds to forward direction.
+_C.BEV.SIZE = [192, 192]
 _C.BEV.RESOLUTION = 0.2  # pixel size in m
-_C.BEV.OFFSET_FORWARD = -64  # offset of the center of gravity of the egocar relative to the center of bev in px
+# offset of the center of gravity of the egocar relative to the center of bev in px
+_C.BEV.OFFSET_FORWARD = -64
 _C.BEV.FEATURE_DOWNSAMPLE = 4  # Downsample factor for bev features
 
 _C.BEV.FRUSTUM_POOL = CN()
@@ -161,7 +166,8 @@ _C.MODEL.EMBEDDING_DIM = 512
 
 _C.MODEL.TRANSITION = CN()
 _C.MODEL.TRANSITION.ENABLED = True
-_C.MODEL.TRANSITION.HIDDEN_STATE_DIM = 1024  # Dimention of the RNN hidden representation
+# Dimention of the RNN hidden representation
+_C.MODEL.TRANSITION.HIDDEN_STATE_DIM = 1024
 _C.MODEL.TRANSITION.STATE_DIM = 512  # Dimension of prior/posterior
 _C.MODEL.TRANSITION.ACTION_LATENT_DIM = 64  # Latent dimension of action
 _C.MODEL.TRANSITION.USE_DROPOUT = True
@@ -220,7 +226,8 @@ _C.SAMPLER.COMMAND_WEIGHTS = [1.0, 1.0, 1.0, 1.0, 1.0, 1.0]
 
 def get_parser():
     parser = argparse.ArgumentParser(description='World model training')
-    parser.add_argument('--config-file', default='', metavar='FILE', help='path to config file')
+    parser.add_argument('--config-file', default='',
+                        metavar='FILE', help='path to config file')
     parser.add_argument(
         'opts', help='Modify config options using the command-line', default=None, nargs=argparse.REMAINDER,
     )
@@ -237,7 +244,8 @@ def _find_extra_keys(dict1, dict2, path=''):
         new_path = f"{path}.{key}" if path else key
         if key in dict1:
             if isinstance(dict1[key], dict) and isinstance(dict2[key], dict):
-                results.extend(_find_extra_keys(dict1[key], dict2[key], new_path))
+                results.extend(_find_extra_keys(
+                    dict1[key], dict2[key], new_path))
         else:
             results.append(new_path)
         results.sort()
@@ -252,16 +260,17 @@ def get_cfg(args=None, cfg_dict=None):
     if cfg_dict is not None:
         extra_keys = _find_extra_keys(cfg, cfg_dict)
         if len(extra_keys) > 0:
-            print(f"Warning - the cfg_dict merging into the main cfg has keys that do not exist in main: {extra_keys}")
+            print(
+                f"Warning - the cfg_dict merging into the main cfg has keys that do not exist in main: {extra_keys}")
             cfg.set_new_allowed(True)
         cfg.merge_from_other_cfg(CfgNode(cfg_dict))
 
     if args is not None:
-        if args.config:
-            cfg.merge_from_file(args.config)
+        if args.config_file:
+            cfg.merge_from_file(args.config_file)
 
-        if args.config1:
-            cfg.merge_from_file(args.config1)
+        # if args.config1:
+        #    cfg.merge_from_file(args.config1)
 
         if args.opts:
             cfg.merge_from_list(args.opts)

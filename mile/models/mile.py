@@ -9,6 +9,9 @@ from mile.models.frustum_pooling import FrustumPooling
 from mile.layers.layers import BasicBlock
 from mile.models.transition import RSSM
 
+import torchshow as ts
+from pprint import pprint
+
 
 class Mile(nn.Module):
     def __init__(self, cfg):
@@ -21,15 +24,18 @@ class Mile(nn.Module):
             self.encoder = timm.create_model(
                 cfg.MODEL.ENCODER.NAME, pretrained=True, features_only=True, out_indices=[2, 3, 4],
             )
-            feature_info = self.encoder.feature_info.get_dicts(keys=['num_chs', 'reduction'])
+            feature_info = self.encoder.feature_info.get_dicts(
+                keys=['num_chs', 'reduction'])
 
-        self.feat_decoder = Decoder(feature_info, self.cfg.MODEL.ENCODER.OUT_CHANNELS)
+        self.feat_decoder = Decoder(
+            feature_info, self.cfg.MODEL.ENCODER.OUT_CHANNELS)
 
         if not self.cfg.EVAL.NO_LIFTING:
             # Frustum pooling
             bev_downsample = cfg.BEV.FEATURE_DOWNSAMPLE
             self.frustum_pooling = FrustumPooling(
-                size=(cfg.BEV.SIZE[0] // bev_downsample, cfg.BEV.SIZE[1] // bev_downsample),
+                size=(cfg.BEV.SIZE[0] // bev_downsample,
+                      cfg.BEV.SIZE[1] // bev_downsample),
                 scale=cfg.BEV.RESOLUTION * bev_downsample,
                 offsetx=cfg.BEV.OFFSET_FORWARD / bev_downsample,
                 dbound=cfg.BEV.FRUSTUM_POOL.D_BOUND,
@@ -37,8 +43,10 @@ class Mile(nn.Module):
             )
 
             # mono depth head
-            self.depth_decoder = Decoder(feature_info, self.cfg.MODEL.ENCODER.OUT_CHANNELS)
-            self.depth = nn.Conv2d(self.depth_decoder.out_channels, self.frustum_pooling.D, kernel_size=1)
+            self.depth_decoder = Decoder(
+                feature_info, self.cfg.MODEL.ENCODER.OUT_CHANNELS)
+            self.depth = nn.Conv2d(
+                self.depth_decoder.out_channels, self.frustum_pooling.D, kernel_size=1)
             # only lift argmax of depth distribution for speed
             self.sparse_depth = cfg.BEV.FRUSTUM_POOL.SPARSE
             self.sparse_depth_count = cfg.BEV.FRUSTUM_POOL.SPARSE_COUNT
@@ -47,31 +55,37 @@ class Mile(nn.Module):
 
         # Route map
         if self.cfg.MODEL.ROUTE.ENABLED:
-            self.backbone_route = RouteEncode(cfg.MODEL.ROUTE.CHANNELS, cfg.MODEL.ROUTE.BACKBONE)
+            self.backbone_route = RouteEncode(
+                cfg.MODEL.ROUTE.CHANNELS, cfg.MODEL.ROUTE.BACKBONE)
             backbone_bev_in_channels += self.backbone_route.out_channels
 
         # Measurements
         if self.cfg.MODEL.MEASUREMENTS.ENABLED:
             self.command_encoder = nn.Sequential(
                 nn.Embedding(6, self.cfg.MODEL.MEASUREMENTS.COMMAND_CHANNELS),
-                nn.Linear(self.cfg.MODEL.MEASUREMENTS.COMMAND_CHANNELS, self.cfg.MODEL.MEASUREMENTS.COMMAND_CHANNELS),
+                nn.Linear(self.cfg.MODEL.MEASUREMENTS.COMMAND_CHANNELS,
+                          self.cfg.MODEL.MEASUREMENTS.COMMAND_CHANNELS),
                 nn.ReLU(True),
-                nn.Linear(self.cfg.MODEL.MEASUREMENTS.COMMAND_CHANNELS, self.cfg.MODEL.MEASUREMENTS.COMMAND_CHANNELS),
+                nn.Linear(self.cfg.MODEL.MEASUREMENTS.COMMAND_CHANNELS,
+                          self.cfg.MODEL.MEASUREMENTS.COMMAND_CHANNELS),
                 nn.ReLU(True),
             )
 
             self.command_next_encoder = nn.Sequential(
                 nn.Embedding(6, self.cfg.MODEL.MEASUREMENTS.COMMAND_CHANNELS),
-                nn.Linear(self.cfg.MODEL.MEASUREMENTS.COMMAND_CHANNELS, self.cfg.MODEL.MEASUREMENTS.COMMAND_CHANNELS),
+                nn.Linear(self.cfg.MODEL.MEASUREMENTS.COMMAND_CHANNELS,
+                          self.cfg.MODEL.MEASUREMENTS.COMMAND_CHANNELS),
                 nn.ReLU(True),
-                nn.Linear(self.cfg.MODEL.MEASUREMENTS.COMMAND_CHANNELS, self.cfg.MODEL.MEASUREMENTS.COMMAND_CHANNELS),
+                nn.Linear(self.cfg.MODEL.MEASUREMENTS.COMMAND_CHANNELS,
+                          self.cfg.MODEL.MEASUREMENTS.COMMAND_CHANNELS),
                 nn.ReLU(True),
             )
 
             self.gps_encoder = nn.Sequential(
                 nn.Linear(2*2, self.cfg.MODEL.MEASUREMENTS.GPS_CHANNELS),
                 nn.ReLU(True),
-                nn.Linear(self.cfg.MODEL.MEASUREMENTS.GPS_CHANNELS, self.cfg.MODEL.MEASUREMENTS.GPS_CHANNELS),
+                nn.Linear(self.cfg.MODEL.MEASUREMENTS.GPS_CHANNELS,
+                          self.cfg.MODEL.MEASUREMENTS.GPS_CHANNELS),
                 nn.ReLU(True),
             )
 
@@ -96,10 +110,12 @@ class Mile(nn.Module):
             features_only=True,
             out_indices=[3],
         )
-        feature_info_bev = self.backbone_bev.feature_info.get_dicts(keys=['num_chs', 'reduction'])
+        feature_info_bev = self.backbone_bev.feature_info.get_dicts(
+            keys=['num_chs', 'reduction'])
         embedding_n_channels = self.cfg.MODEL.EMBEDDING_DIM
         self.final_state_conv = nn.Sequential(
-            BasicBlock(feature_info_bev[-1]['num_chs'], embedding_n_channels, stride=2, downsample=True),
+            BasicBlock(feature_info_bev[-1]['num_chs'],
+                       embedding_n_channels, stride=2, downsample=True),
             BasicBlock(embedding_n_channels, embedding_n_channels),
             nn.AdaptiveAvgPool2d(output_size=(1, 1)),
             nn.Flatten(start_dim=1),
@@ -120,9 +136,10 @@ class Mile(nn.Module):
                 dropout_probability=self.cfg.MODEL.TRANSITION.DROPOUT_PROBABILITY,
             )
 
-        # Policy
+        #  Policy
         if self.cfg.MODEL.TRANSITION.ENABLED:
-            state_dim = self.cfg.MODEL.TRANSITION.HIDDEN_STATE_DIM + self.cfg.MODEL.TRANSITION.STATE_DIM
+            state_dim = self.cfg.MODEL.TRANSITION.HIDDEN_STATE_DIM + \
+                self.cfg.MODEL.TRANSITION.STATE_DIM
         else:
             state_dim = embedding_n_channels
         self.policy = Policy(in_channels=state_dim)
@@ -143,7 +160,7 @@ class Mile(nn.Module):
                 is_segmentation=False,
             )
 
-        # Used during deployment to save last state
+        #  Used during deployment to save last state
         self.last_h = None
         self.last_sample = None
         self.last_action = None
@@ -174,15 +191,18 @@ class Mile(nn.Module):
             if deployment:
                 action = batch['action']
             else:
-                action = torch.cat([batch['throttle_brake'], batch['steering']], dim=-1)
-            state_dict = self.rssm(embedding, action, use_sample=not deployment, policy=self.policy)
+                action = torch.cat(
+                    [batch['throttle_brake'], batch['steering']], dim=-1)
+            state_dict = self.rssm(
+                embedding, action, use_sample=not deployment, policy=self.policy)
 
             if deployment:
                 state_dict = remove_past(state_dict, s)
                 s = 1
 
             output = {**output, **state_dict}
-            state = torch.cat([state_dict['posterior']['hidden_state'], state_dict['posterior']['sample']], dim=-1)
+            state = torch.cat([state_dict['posterior']['hidden_state'],
+                              state_dict['posterior']['sample']], dim=-1)
         else:
             state = embedding
 
@@ -195,7 +215,8 @@ class Mile(nn.Module):
         if self.cfg.SEMANTIC_SEG.ENABLED:
             if (not deployment) or (deployment and DISPLAY_SEGMENTATION):
                 bev_decoder_output = self.bev_decoder(state)
-                bev_decoder_output = unpack_sequence_dim(bev_decoder_output, b, s)
+                bev_decoder_output = unpack_sequence_dim(
+                    bev_decoder_output, b, s)
                 output = {**output, **bev_decoder_output}
 
         if self.cfg.EVAL.RGB_SUPERVISION:
@@ -222,26 +243,32 @@ class Mile(nn.Module):
         if not self.cfg.EVAL.NO_LIFTING:
             # Depth distribution
             depth = self.depth(self.depth_decoder(xs)).softmax(dim=1)
-
+            # depth_map = self.frustum_pooling.get_depth_map(depth)
+            # ts.show(depth_map)
             if self.sparse_depth:
                 # only lift depth for topk most likely depth bins
                 topk_bins = depth.topk(self.sparse_depth_count, dim=1)[1]
-                depth_mask = torch.zeros(depth.shape, device=depth.device, dtype=torch.bool)
+                depth_mask = torch.zeros(
+                    depth.shape, device=depth.device, dtype=torch.bool)
                 depth_mask.scatter_(1, topk_bins, 1)
             else:
                 depth_mask = torch.zeros(0, device=depth.device)
-            x = (depth.unsqueeze(1) * x.unsqueeze(2)).type_as(x)  # outer product
+            # TODO: visualize depth
+            x = (depth.unsqueeze(1) * x.unsqueeze(2)
+                 ).type_as(x)  # outer product
 
             #  Add camera dimension
             x = x.unsqueeze(1)
             x = x.permute(0, 1, 3, 4, 5, 2)
 
-            x = self.frustum_pooling(x, intrinsics.unsqueeze(1), extrinsics.unsqueeze(1), depth_mask)
+            x = self.frustum_pooling(x, intrinsics.unsqueeze(
+                1), extrinsics.unsqueeze(1), depth_mask)
 
         if self.cfg.MODEL.ROUTE.ENABLED:
             route_map = pack_sequence_dim(batch['route_map'])
             route_map_features = self.backbone_route(route_map)
-            route_map_features = route_map_features.unsqueeze(2).unsqueeze(3).expand(-1, -1, x.shape[2], x.shape[3])
+            route_map_features = route_map_features.unsqueeze(
+                2).unsqueeze(3).expand(-1, -1, x.shape[2], x.shape[3])
             x = torch.cat([x, route_map_features], dim=1)
 
         if self.cfg.MODEL.MEASUREMENTS.ENABLED:
@@ -251,19 +278,25 @@ class Mile(nn.Module):
             gps_vector_next = pack_sequence_dim(batch['gps_vector_next'])
 
             command_features = self.command_encoder(route_command)
-            command_features = command_features.unsqueeze(2).unsqueeze(3).expand(-1, -1, x.shape[2], x.shape[3])
+            command_features = command_features.unsqueeze(
+                2).unsqueeze(3).expand(-1, -1, x.shape[2], x.shape[3])
             x = torch.cat([x, command_features], dim=1)
 
-            command_next_features = self.command_next_encoder(route_command_next)
-            command_next_features = command_next_features.unsqueeze(2).unsqueeze(3).expand(-1, -1, x.shape[2], x.shape[3])
+            command_next_features = self.command_next_encoder(
+                route_command_next)
+            command_next_features = command_next_features.unsqueeze(
+                2).unsqueeze(3).expand(-1, -1, x.shape[2], x.shape[3])
             x = torch.cat([x, command_next_features], dim=1)
 
-            gps_features = self.gps_encoder(torch.cat([gps_vector, gps_vector_next], dim=-1))
-            gps_features = gps_features.unsqueeze(2).unsqueeze(3).expand(-1, -1, x.shape[2], x.shape[3])
+            gps_features = self.gps_encoder(
+                torch.cat([gps_vector, gps_vector_next], dim=-1))
+            gps_features = gps_features.unsqueeze(2).unsqueeze(
+                3).expand(-1, -1, x.shape[2], x.shape[3])
             x = torch.cat([x, gps_features], dim=1)
 
         speed_features = self.speed_enc(speed / self.speed_normalisation)
-        speed_features = speed_features.unsqueeze(2).unsqueeze(3).expand(-1, -1, x.shape[2], x.shape[3])
+        speed_features = speed_features.unsqueeze(2).unsqueeze(
+            3).expand(-1, -1, x.shape[2], x.shape[3])
         x = torch.cat((x, speed_features), 1)
 
         embedding = self.backbone_bev(x)[-1]
@@ -299,7 +332,8 @@ class Mile(nn.Module):
             if predict_action:
                 action_t = self.policy(torch.cat([h_t, sample_t], dim=-1))
             else:
-                action_t = torch.cat([batch['throttle_brake'][:, s+t], batch['steering'][:, s+t]], dim=-1)
+                action_t = torch.cat(
+                    [batch['throttle_brake'][:, s+t], batch['steering'][:, s+t]], dim=-1)
             prior_t = self.rssm.imagine_step(
                 h_t, sample_t, action_t, use_sample=True, policy=self.policy,
             )
@@ -313,8 +347,10 @@ class Mile(nn.Module):
         for k, v in output_imagine.items():
             output_imagine[k] = torch.stack(v, dim=1)
 
-        bev_decoder_output = self.bev_decoder(pack_sequence_dim(output_imagine['state']))
-        bev_decoder_output = unpack_sequence_dim(bev_decoder_output, b, future_horizon)
+        bev_decoder_output = self.bev_decoder(
+            pack_sequence_dim(output_imagine['state']))
+        bev_decoder_output = unpack_sequence_dim(
+            bev_decoder_output, b, future_horizon)
         output_imagine = {**output_imagine, **bev_decoder_output}
 
         return output_observe, output_imagine
@@ -332,14 +368,15 @@ class Mile(nn.Module):
             'hidden': [],
             'sample': [],
         }
-        h_t = batch['hidden_state'] #(b, c)
-        sample_t = batch['sample']  #(b, s)
+        h_t = batch['hidden_state']  # (b, c)
+        sample_t = batch['sample']  # (b, s)
         b = h_t.shape[0]
         for t in range(future_horizon):
             if predict_action:
                 action_t = self.policy(torch.cat([h_t, sample_t], dim=-1))
             else:
-                action_t = torch.cat([batch['throttle_brake'][:, t], batch['steering'][:, t]], dim=-1)
+                action_t = torch.cat(
+                    [batch['throttle_brake'][:, t], batch['steering'][:, t]], dim=-1)
             prior_t = self.rssm.imagine_step(
                 h_t, sample_t, action_t, use_sample=True, policy=self.policy,
             )
@@ -353,8 +390,10 @@ class Mile(nn.Module):
         for k, v in output_imagine.items():
             output_imagine[k] = torch.stack(v, dim=1)
 
-        bev_decoder_output = self.bev_decoder(pack_sequence_dim(output_imagine['state']))
-        bev_decoder_output = unpack_sequence_dim(bev_decoder_output, b, future_horizon)
+        bev_decoder_output = self.bev_decoder(
+            pack_sequence_dim(output_imagine['state']))
+        bev_decoder_output = unpack_sequence_dim(
+            bev_decoder_output, b, future_horizon)
         output_imagine = {**output_imagine, **bev_decoder_output}
 
         return output_imagine
@@ -388,8 +427,10 @@ class Mile(nn.Module):
 
             # Recurrent state sequence module
             if self.last_h is None:
-                h_t = action_t.new_zeros(b, self.cfg.MODEL.TRANSITION.HIDDEN_STATE_DIM)
-                sample_t = action_t.new_zeros(b, self.cfg.MODEL.TRANSITION.STATE_DIM)
+                h_t = action_t.new_zeros(
+                    b, self.cfg.MODEL.TRANSITION.HIDDEN_STATE_DIM)
+                sample_t = action_t.new_zeros(
+                    b, self.cfg.MODEL.TRANSITION.STATE_DIM)
             else:
                 h_t = self.last_h
                 sample_t = self.last_sample
@@ -430,4 +471,14 @@ class Mile(nn.Module):
             bev_decoder_output = unpack_sequence_dim(bev_decoder_output, b, s)
             output = {**output, **bev_decoder_output}
 
+        pprint(output.keys())
+        # bev_prediction_1 = output['bev_segmentation_1'].detach()
+        # bev_prediction_1 = torch.argmax(bev_prediction_1, dim=2)[:, -1]
+        # ts.show(bev_prediction_1)
+        # bev_prediction_2 = output['bev_segmentation_2'].detach()
+        # bev_prediction_2 = torch.argmax(bev_prediction_2, dim=2)[:, -1]
+        # ts.show(bev_prediction_2)
+        # bev_prediction_4 = output['bev_segmentation_4'].detach()
+        # bev_prediction_4 = torch.argmax(bev_prediction_4, dim=2)[:, -1]
+        # ts.show(bev_prediction_4)
         return output

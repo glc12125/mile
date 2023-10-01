@@ -27,7 +27,8 @@ class MILEAgent(AutonomousAgent):
     def sensors(self):
         return [
             {"type": "sensor.speedometer", "id": "speed"},
-            {"type": "sensor.camera.rgb", "id": "central_rgb", **self._camera_parameters},
+            {"type": "sensor.camera.rgb", "id": "central_rgb",
+                **self._camera_parameters},
             {"type": "sensor.other.gnss", "id": "gps", "x": 0.0, "y": 0.0, "z": 0.0},
             {
                 "type": "sensor.other.imu",
@@ -45,7 +46,8 @@ class MILEAgent(AutonomousAgent):
         self.track = Track.SENSORS
         _cfg = get_cfg()
         _cfg.merge_from_file(path_to_conf_file)
-        self._training_module = WorldModelTrainer.load_from_checkpoint(_cfg.PRETRAINED.PATH, path_to_conf_file=path_to_conf_file)
+        self._training_module = WorldModelTrainer.load_from_checkpoint(
+            _cfg.PRETRAINED.PATH, path_to_conf_file=path_to_conf_file)
         print(f'Loaded model from {_cfg.PRETRAINED.PATH}')
         self._policy = self._training_module.to("cuda").float()
         self._policy = self._policy.eval()
@@ -63,9 +65,12 @@ class MILEAgent(AutonomousAgent):
             "height": self._cfg.IMAGE.SIZE[0],
             "fov": self._cfg.IMAGE.FOV,
         }
-        n_image_per_stride = int(self._cfg.DATASET.FREQUENCY * self._cfg.DATASET.STRIDE_SEC)
-        self._input_queue_size = (self._cfg.RECEPTIVE_FIELD - 1) * n_image_per_stride + 1
-        self._sequence_indices = range(0, self._input_queue_size, n_image_per_stride)
+        n_image_per_stride = int(
+            self._cfg.DATASET.FREQUENCY * self._cfg.DATASET.STRIDE_SEC)
+        self._input_queue_size = (
+            self._cfg.RECEPTIVE_FIELD - 1) * n_image_per_stride + 1
+        self._sequence_indices = range(
+            0, self._input_queue_size, n_image_per_stride)
         self._input_queue = {
             "image": deque(maxlen=self._input_queue_size),
             "speed": deque(maxlen=self._input_queue_size),
@@ -97,7 +102,9 @@ class MILEAgent(AutonomousAgent):
             with torch.no_grad():
                 self._extract_data(input_data)
                 model_input = self._get_model_input()
-                model_output = self._policy(model_input, deployment=True)
+                # model_output = self._policy(model_input, deployment=True)
+                model_output = self._policy.deployment_forward(
+                    model_input, is_dreaming=False)
                 self._vehicle_control = self._process_output(model_output)
 
                 # if socket.gethostname() == 'auris':
@@ -110,7 +117,8 @@ class MILEAgent(AutonomousAgent):
     def _extract_data(self, input_data):
         # Extract data from Carla dict
         speed_float = input_data["speed"][1]["speed"]
-        image_np = input_data["central_rgb"][1].transpose((2, 0, 1))  # Transpose H W C to C H W
+        image_np = input_data["central_rgb"][1].transpose(
+            (2, 0, 1))  # Transpose H W C to C H W
         image_np = image_np[0:3]  # Drop alpha channel from BGR-A
         image_np = image_np[::-1]  # BGR -> RGB
         intrinsics_np, extrinsics_np = calculate_geometry(
@@ -124,7 +132,8 @@ class MILEAgent(AutonomousAgent):
             self._camera_parameters["yaw"],
             self._camera_parameters["roll"],
         )
-        route_command, gps_vector, route_command_next, gps_vector_next = self._extract_current_navigation(input_data)
+        route_command, gps_vector, route_command_next, gps_vector_next = self._extract_current_navigation(
+            input_data)
 
         # Move to tensors to GPU and update queue
         image_torch = torch.from_numpy(image_np.copy()).cuda()
@@ -153,7 +162,8 @@ class MILEAgent(AutonomousAgent):
         next_gps, _ = self._global_plan[self._idx_plan + 1]
         next_gps = gps_dict_to_numpy_array(next_gps)
         ego_gps = input_data["gps"][1]  # Latitude, Longitude, Altitude
-        imu = input_data["imu"][1]  # IMU data: Acc[x,y,z], AngVel[x,y,z], Orientation (radians with north (0.0, -1.0, 0.0) in UE)
+        # IMU data: Acc[x,y,z], AngVel[x,y,z], Orientation (radians with north (0.0, -1.0, 0.0) in UE)
+        imu = input_data["imu"][1]
 
         # Figure out if we need to go to the next waypoint.
         loc_in_ev = preprocess_gps(ego_gps, next_gps, imu)
@@ -165,10 +175,12 @@ class MILEAgent(AutonomousAgent):
         _, route_command_0 = self._global_plan[max(0, self._idx_plan)]
         gps_point, route_command_1 = self._global_plan[self._idx_plan + 1]
         # Gps waypoint after the immediate next waypoint.
-        gps_point2, route_command_2 = self._global_plan[min(len(self._global_plan) - 1, self._idx_plan + 2)]
+        gps_point2, route_command_2 = self._global_plan[min(
+            len(self._global_plan) - 1, self._idx_plan + 2)]
 
         if (route_command_0 in [RoadOption.CHANGELANELEFT, RoadOption.CHANGELANERIGHT]) and (
-            route_command_1 not in [RoadOption.CHANGELANELEFT, RoadOption.CHANGELANERIGHT]
+            route_command_1 not in [
+                RoadOption.CHANGELANELEFT, RoadOption.CHANGELANERIGHT]
         ):
             route_command = route_command_1
         else:
@@ -188,10 +200,12 @@ class MILEAgent(AutonomousAgent):
         )
 
         route_command, gps_vector = preprocess_measurements(
-            route_command.value, ego_gps, gps_dict_to_numpy_array(gps_point), imu,
+            route_command.value, ego_gps, gps_dict_to_numpy_array(
+                gps_point), imu,
         )
         route_command_next, gps_vector_next = preprocess_measurements(
-            route_command_next.value, ego_gps, gps_dict_to_numpy_array(gps_point2), imu,
+            route_command_next.value, ego_gps, gps_dict_to_numpy_array(
+                gps_point2), imu,
         )
         return route_command, gps_vector, route_command_next, gps_vector_next
 
@@ -203,7 +217,8 @@ class MILEAgent(AutonomousAgent):
 
         # When the action buffer is empty (first forward pass), add a dummy zero action
         if len(self._input_queue["action"]) == 0:
-            self._input_queue["action"].append(torch.zeros(2, device=torch.device("cuda")))
+            self._input_queue["action"].append(
+                torch.zeros(2, device=torch.device("cuda")))
 
         # When the buffers are not full (first forward pass), replicate the last inputs to fill it up
         for key in self._input_queue.keys():
@@ -229,7 +244,8 @@ class MILEAgent(AutonomousAgent):
     def _process_output(self, model_output):
         # Append action to queue
         actions = (
-            torch.cat([model_output["throttle_brake"], model_output["steering"]], dim=-1)[0, 0]
+            torch.cat([model_output["throttle_brake"],
+                      model_output["steering"]], dim=-1)[0, 0]
             .cpu()
             .detach()
             .numpy()
@@ -263,4 +279,5 @@ class MILEAgent(AutonomousAgent):
         img_std = np.array(self._cfg.IMAGE.IMAGENET_STD)
         image = (255 * (image * img_std + img_mean)).astype(np.uint8)
         image = Image.fromarray(image)
-        image.save(os.path.join(save_path, f'image_{int(timestamp * 10):06d}.png'))
+        image.save(os.path.join(
+            save_path, f'image_{int(timestamp * 10):06d}.png'))

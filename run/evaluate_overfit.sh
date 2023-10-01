@@ -11,12 +11,11 @@ PORT=$3
 
 evaluate () {
   path=\"$1\"
-  python -u evaluate.py --config-name evaluate carla_sh_path=${CARLA_PATH} agent.mile.ckpt=$path port=${PORT}
+  python -u evaluate.py --config-name evaluate_overfit carla_sh_path=${CARLA_PATH} agent.mile.ckpt=$path port=${PORT}
 }
 
-#source ~/miniconda3/etc/profile.d/conda.sh
+source ~/miniconda3/etc/profile.d/conda.sh
 conda activate mile
-source ~/miniconda3/envs/mile/etc/conda/activate.d/env_vars.sh
 
 # remove checkpoint files
 #rm outputs/port_${PORT}_checkpoint.txt

@@ -25,13 +25,15 @@ class SaveGitDiffHashCallback(pl.Callback):
 
 def main():
     args = get_parser().parse_args()
+    print(args)
     cfg = get_cfg(args)
 
     data = DataModule(cfg)
     model = WorldModelTrainer(cfg.convert_to_dict())
 
     save_dir = os.path.join(
-        cfg.LOG_DIR, time.strftime('%d%B%Yat%H:%M:%S%Z') + '_' + socket.gethostname() + '_' + cfg.TAG
+        cfg.LOG_DIR, time.strftime(
+            '%d%B%Yat%H:%M:%S%Z') + '_' + socket.gethostname() + '_' + cfg.TAG
     )
     logger = pl.loggers.TensorBoardLogger(save_dir=save_dir)
 
@@ -40,7 +42,7 @@ def main():
         SaveGitDiffHashCallback(),
         pl.callbacks.LearningRateMonitor(),
         ModelCheckpoint(
-            save_dir, every_n_train_steps=cfg.VAL_CHECK_INTERVAL,
+            save_dir, every_n_train_steps=cfg.VAL_CHECK_INTERVAL, filename="{epoch}-{step}-{val_throttle_brake:.2f}-{val_steering:.2f}-{val_probabilistic:.2f}-{val_bev_segmentation_1:.2f}-{val_bev_center_1:.2f}-{val_bev_offset_1:.2f}-{val_loss:.4f}", save_top_k=3, monitor="val_loss", mode="min"
         ),
     ]
 
@@ -48,26 +50,52 @@ def main():
         limit_val_batches = float(cfg.LIMIT_VAL_BATCHES)
     else:
         limit_val_batches = cfg.LIMIT_VAL_BATCHES
+    if cfg.LIMIT_TRAIN_BATCHES in [0, 1]:
+        limit_train_batches = float(cfg.LIMIT_TRAIN_BATCHES)
+    else:
+        limit_train_batches = cfg.LIMIT_TRAIN_BATCHES
 
     replace_sampler_ddp = not cfg.SAMPLER.ENABLED
 
-    trainer = pl.Trainer(
-        gpus=cfg.GPUS,
-        accelerator='gpu',
-        strategy='ddp',
-        precision=cfg.PRECISION,
-        sync_batchnorm=True,
-        max_epochs=None,
-        max_steps=cfg.STEPS,
-        callbacks=callbacks,
-        logger=logger,
-        log_every_n_steps=cfg.LOGGING_INTERVAL,
-        val_check_interval=cfg.VAL_CHECK_INTERVAL,
-        limit_val_batches=limit_val_batches,
-        replace_sampler_ddp=replace_sampler_ddp,
-        accumulate_grad_batches=cfg.OPTIMIZER.ACCUMULATE_GRAD_BATCHES,
-        num_sanity_val_steps=0,
-    )
+    if cfg.PRETRAINED.RESUME_FROM_CHECKPOINT_PATH:
+        trainer = pl.Trainer(
+            resume_from_checkpoint=cfg.PRETRAINED.RESUME_FROM_CHECKPOINT_PATH,
+            gpus=cfg.GPUS,
+            accelerator='gpu',
+            strategy='ddp',
+            precision=cfg.PRECISION,
+            sync_batchnorm=True,
+            max_epochs=None,
+            max_steps=cfg.STEPS,
+            callbacks=callbacks,
+            logger=logger,
+            log_every_n_steps=cfg.LOGGING_INTERVAL,
+            val_check_interval=cfg.VAL_CHECK_INTERVAL,
+            limit_train_batches=limit_train_batches,
+            limit_val_batches=limit_val_batches,
+            replace_sampler_ddp=replace_sampler_ddp,
+            accumulate_grad_batches=cfg.OPTIMIZER.ACCUMULATE_GRAD_BATCHES,
+            num_sanity_val_steps=2,
+        )
+    else:
+        trainer = pl.Trainer(
+            gpus=cfg.GPUS,
+            accelerator='gpu',
+            strategy='ddp',
+            precision=cfg.PRECISION,
+            sync_batchnorm=True,
+            max_epochs=None,
+            max_steps=cfg.STEPS,
+            callbacks=callbacks,
+            logger=logger,
+            log_every_n_steps=cfg.LOGGING_INTERVAL,
+            val_check_interval=cfg.VAL_CHECK_INTERVAL,
+            limit_train_batches=limit_train_batches,
+            limit_val_batches=limit_val_batches,
+            replace_sampler_ddp=replace_sampler_ddp,
+            accumulate_grad_batches=cfg.OPTIMIZER.ACCUMULATE_GRAD_BATCHES,
+            num_sanity_val_steps=2,
+        )
 
     trainer.fit(model, datamodule=data)
 

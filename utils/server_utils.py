@@ -1,5 +1,6 @@
 """Adapted from https://github.com/zhejz/carla-roach CC-BY-NC 4.0 license."""
 
+from mile.constants import CARLA_FPS
 import subprocess
 import os
 import time
@@ -7,12 +8,10 @@ from omegaconf import OmegaConf
 import logging
 log = logging.getLogger(__name__)
 
-from mile.constants import CARLA_FPS
-
 
 def kill_carla(port=2005):
     # The command below kills ALL carla processes
-    #kill_process = subprocess.Popen('killall -9 -r CarlaUE4-Linux', shell=True)
+    # kill_process = subprocess.Popen('killall -9 -r CarlaUE4-Linux', shell=True)
 
     # This one only kills processes linked to a certain port
     kill_process = subprocess.Popen(f'fuser -k {port}/tcp', shell=True)
@@ -47,10 +46,11 @@ class CarlaServerManager():
     def start(self):
         kill_carla(self.port)
         for cfg in self.env_configs:
-            cmd = f'CUDA_VISIBLE_DEVICES={cfg["gpu"]} bash {self._carla_sh_str} ' \
+            cmd = f'CUDA_VISIBLE_DEVICES={cfg["gpu"]} sudo -u xyz bash {self._carla_sh_str} ' \
                 f'-fps={CARLA_FPS} -quality-level=Epic -carla-rpc-port={cfg["port"]}'
             log.info(cmd)
-            server_process = subprocess.Popen(cmd, shell=True, preexec_fn=os.setsid)
+            server_process = subprocess.Popen(
+                cmd, shell=True, preexec_fn=os.setsid)
         time.sleep(self._t_sleep)
 
     def stop(self):

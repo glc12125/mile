@@ -6,16 +6,21 @@ import torch.nn as nn
 
 from mile.utils.geometry_utils import bev_params_to_intrinsics, intrinsics_inverse
 
+import torchshow as ts
+
 
 def gen_dx_bx(size, scale, offsetx):
-    xbound = [-size[0] * scale / 2 - offsetx * scale, size[0] * scale / 2 - offsetx * scale, scale]
+    xbound = [-size[0] * scale / 2 - offsetx * scale,
+              size[0] * scale / 2 - offsetx * scale, scale]
     ybound = [-size[1] * scale / 2, size[1] * scale / 2, scale]
     zbound = [-10.0, 10.0, 20.0]
 
     dx = torch.Tensor([row[2] for row in [xbound, ybound, zbound]])
-    bx = torch.Tensor([row[0] + row[2] / 2.0 for row in [xbound, ybound, zbound]])
+    bx = torch.Tensor(
+        [row[0] + row[2] / 2.0 for row in [xbound, ybound, zbound]])
     # nx = torch.LongTensor([(row[1] - row[0]) / row[2] for row in [xbound, ybound, zbound]])
-    nx = torch.LongTensor([np.round((row[1] - row[0]) / row[2]) for row in [xbound, ybound, zbound]])
+    nx = torch.LongTensor([np.round((row[1] - row[0]) / row[2])
+                          for row in [xbound, ybound, zbound]])
 
     return dx, bx, nx
 
@@ -77,7 +82,8 @@ class FrustumPooling(nn.Module):
         """
         super().__init__()
 
-        self.register_buffer('bev_intrinsics', torch.tensor(bev_params_to_intrinsics(size, scale, offsetx)))
+        self.register_buffer('bev_intrinsics', torch.tensor(
+            bev_params_to_intrinsics(size, scale, offsetx)))
 
         dx, bx, nx = gen_dx_bx(size, scale, offsetx)
         self.nx_constant = nx.numpy().tolist()
@@ -87,7 +93,8 @@ class FrustumPooling(nn.Module):
         self.use_quickcumsum = use_quickcumsum
 
         self.dbound = dbound
-        ds = torch.arange(self.dbound[0], self.dbound[1], self.dbound[2], dtype=torch.float32)
+        ds = torch.arange(
+            self.dbound[0], self.dbound[1], self.dbound[2], dtype=torch.float32)
         self.D = len(ds)
         self.register_buffer('ds', ds, persistent=False)
 
@@ -101,14 +108,18 @@ class FrustumPooling(nn.Module):
             fH, fW = image.shape[-3:-1]
             ogfH, ogfW = fH * self.downsample, fW * self.downsample
             ds = self.ds.view(-1, 1, 1).expand(-1, fH, fW)
-            xs = torch.linspace(0, ogfW - 1, fW, dtype=torch.float, device=device).view(1, 1, fW).expand(self.D, fH, fW)
-            ys = torch.linspace(0, ogfH - 1, fH, dtype=torch.float, device=device).view(1, fH, 1).expand(self.D, fH, fW)
+            xs = torch.linspace(0, ogfW - 1, fW, dtype=torch.float,
+                                device=device).view(1, 1, fW).expand(self.D, fH, fW)
+            ys = torch.linspace(0, ogfH - 1, fH, dtype=torch.float,
+                                device=device).view(1, fH, 1).expand(self.D, fH, fW)
 
+            # print("in initialize_frustum, xs: {}, ys: {}, ds: {}".format(xs, ys, ds))
             # D x H x W x 3
             # with the 3D coordinates being (x, y, z)
             self.frustum = torch.stack((xs, ys, ds), -1)
 
-    def get_geometry(self, rots, trans, intrins):  # , post_rots=None, post_trans=None):
+    # , post_rots=None, post_trans=None):
+    def get_geometry(self, rots, trans, intrins):
         """Determine the (x,y,z) locations (in the ego frame)
         of the points in the point cloud.
         Returns B x N x D x H/downsample x W/downsample x 3
@@ -139,10 +150,13 @@ class FrustumPooling(nn.Module):
         geom_feats = geom_feats.view(Nprime, 3)
 
         # transform world points to bev coords
-        geom_feats[:, 0] = geom_feats[:, 0] * self.bev_intrinsics[0, 0] + self.bev_intrinsics[0, 2]
-        geom_feats[:, 1] = geom_feats[:, 1] * self.bev_intrinsics[1, 1] + self.bev_intrinsics[1, 2]
+        geom_feats[:, 0] = geom_feats[:, 0] * \
+            self.bev_intrinsics[0, 0] + self.bev_intrinsics[0, 2]
+        geom_feats[:, 1] = geom_feats[:, 1] * \
+            self.bev_intrinsics[1, 1] + self.bev_intrinsics[1, 2]
         # TODO: seems like things < -10m also get projected.
-        geom_feats[:, 2] = (geom_feats[:, 2] - self.bx[2] + self.dx[2] / 2.) / self.dx[2]
+        geom_feats[:, 2] = (geom_feats[:, 2] - self.bx[2] +
+                            self.dx[2] / 2.) / self.dx[2]
         geom_feats = geom_feats.long()
 
         batch_ix = torch.cat([torch.full(size=(Nprime // B, 1), fill_value=ix,
@@ -157,16 +171,16 @@ class FrustumPooling(nn.Module):
 
         # filter out points that are outside box
         kept = (geom_feats[:, 0] >= 0) & (geom_feats[:, 0] < self.nx[0]) \
-               & (geom_feats[:, 1] >= 0) & (geom_feats[:, 1] < self.nx[1]) \
-               & (geom_feats[:, 2] >= 0) & (geom_feats[:, 2] < self.nx[2])
+            & (geom_feats[:, 1] >= 0) & (geom_feats[:, 1] < self.nx[1]) \
+            & (geom_feats[:, 2] >= 0) & (geom_feats[:, 2] < self.nx[2])
         x = x[kept]
         geom_feats = geom_feats[kept]
 
         # get tensors from the same voxel next to each other
         ranks = geom_feats[:, 0] * (self.nx[1] * self.nx[2] * B) \
-                + geom_feats[:, 1] * (self.nx[2] * B) \
-                + geom_feats[:, 2] * B \
-                + geom_feats[:, 3]
+            + geom_feats[:, 1] * (self.nx[2] * B) \
+            + geom_feats[:, 2] * B \
+            + geom_feats[:, 3]
         sorts = ranks.argsort()
         x, geom_feats, ranks = x[sorts], geom_feats[sorts], ranks[sorts]
 
@@ -179,14 +193,16 @@ class FrustumPooling(nn.Module):
         # griddify (B x C x up x left x forward)
         final = torch.zeros((B, C, self.nx_constant[2], self.nx_constant[1], self.nx_constant[0]), dtype=x.dtype,
                             device=x.device)
-        final[geom_feats[:, 3], :, geom_feats[:, 2], geom_feats[:, 1], geom_feats[:, 0]] = x
+        final[geom_feats[:, 3], :, geom_feats[:, 2],
+              geom_feats[:, 1], geom_feats[:, 0]] = x
 
         # collapse "up" dimension
         final = torch.cat(final.unbind(dim=2), 1)
 
         return final
 
-    def forward(self, x, intrinsics, pose, mask=torch.zeros(0)):  # , post_rots=None, post_trans=None):
+    # , post_rots=None, post_trans=None):
+    def forward(self, x, intrinsics, pose, mask=torch.zeros(0)):
         """
         Args:
             x: (B x N x D x H x W x C) frustum feature maps
@@ -200,12 +216,14 @@ class FrustumPooling(nn.Module):
         #  [0, 0, 1]]
         # with f' = kf in pixel units. k being the factor in pixel/m, f the focal lens in m.
         # (m_x, m_y) is the center point in pixel.
-
+        print("x size in frustum_pooling: {}".format(x.size()))
         self.initialize_frustum(x)
         rots = pose[..., :3, :3]
         trans = pose[..., :3, 3:]
-        geom = self.get_geometry(rots, trans, intrinsics)  # , post_rots, post_trans)
-        x = self.voxel_pooling(geom, x, mask).type_as(x)  # TODO: do we want to do more of frustum pooling in FP16?
+        # , post_rots, post_trans)
+        geom = self.get_geometry(rots, trans, intrinsics)
+        # TODO: do we want to do more of frustum pooling in FP16?
+        x = self.voxel_pooling(geom, x, mask).type_as(x)
         return x
 
     def get_depth_map(self, depth):

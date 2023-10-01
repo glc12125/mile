@@ -96,10 +96,10 @@ class MileAgent:
         end_time = time.time()
         execution_time = end_time - start_time
         if self.inference_counter > 50:
-            print("--- Preprocess time %s seconds ---" % (execution_time))
+            print("\t--- Preprocess time %s seconds ---" % (execution_time))
             self.preprocess_avg_time = (
                 self.preprocess_avg_time * self.inference_counter + execution_time) / (self.inference_counter + 1)
-            print("--- AVG Preprocess time %s seconds ---" %
+            print("\t--- AVG Preprocess time %s seconds ---" %
                   (self.preprocess_avg_time))
         # Forward pass
         with torch.no_grad():
@@ -113,10 +113,11 @@ class MileAgent:
             end_time = time.time()
             execution_time = end_time - start_time
             if self.inference_counter > 50:
-                print("--- Inferencing time %s seconds ---" % (execution_time))
+                print("\t--- Inferencing time %s seconds ---" %
+                      (execution_time))
                 self.inference_avg_time = (
                     self.inference_avg_time * self.inference_counter + execution_time) / (self.inference_counter + 1)
-                print("--- AVG Inferencing time %s seconds ---" %
+                print("\t--- AVG Inferencing time %s seconds ---" %
                       (self.inference_avg_time))
             else:
                 print("Skipping frame %s" % (self.inference_counter))
@@ -131,34 +132,37 @@ class MileAgent:
         end_time = time.time()
         execution_time = end_time - start_time
         if self.inference_counter > 50:
-            print("--- Postprocess time %s seconds ---" % (execution_time))
+            print("\t--- Postprocess time %s seconds ---" % (execution_time))
             self.postprocess_avg_time = (
                 self.postprocess_avg_time * self.inference_counter + execution_time) / (self.inference_counter + 1)
-            print("--- AVG Postprocess time %s seconds ---" %
+            print("\t--- AVG Postprocess time %s seconds ---" %
                   (self.postprocess_avg_time))
         start_time = time.time()
         # Metrics
-        metrics = self.forward_metrics(policy_input, output)
+        # metrics = self.forward_metrics(policy_input, output)
         end_time = time.time()
         execution_time = end_time - start_time
         if self.inference_counter > 50:
-            print("--- Forward metrics time %s seconds ---" % (execution_time))
+            print("\t--- Forward metrics time %s seconds ---" %
+                  (execution_time))
             self.metrics_avg_time = (
                 self.metrics_avg_time * self.inference_counter + execution_time) / (self.inference_counter + 1)
-            print("--- AVG Forward metrics time %s seconds ---" %
+            print("\t--- AVG Forward metrics time %s seconds ---" %
                   (self.metrics_avg_time))
 
         start_time = time.time()
+        # self.prepare_rendering(policy_input, output,
+        #                       metrics, timestamp, is_dreaming)
         self.prepare_rendering(policy_input, output,
-                               metrics, timestamp, is_dreaming)
+                               None, timestamp, is_dreaming)
         end_time = time.time()
         execution_time = end_time - start_time
         if self.inference_counter > 50:
-            print("--- Prepare rendering time %s seconds ---" %
+            print("\t--- Prepare rendering time %s seconds ---" %
                   (execution_time))
             self.render_avg_time = (
                 self.render_avg_time * self.inference_counter + execution_time) / (self.inference_counter + 1)
-            print("--- AVG Prepare rendering time %s seconds ---\n" %
+            print("\t--- AVG Prepare rendering time %s seconds ---\n" %
                   (self.render_avg_time))
         self.inference_counter += 1
         return control
