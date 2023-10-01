@@ -17,6 +17,7 @@ import re
 import weakref
 import carla
 from carla import ColorConverter as cc
+import cv2
 
 import math
 from queue import Queue
@@ -859,7 +860,7 @@ class CameraManager(object):
 # end of pygame related
 
 
-def run_single(run_name, env, agents_dict, agents_log_dir, log_video, cfg, max_step=None):
+def run_single(run_name, env, agents_dict, agents_log_dir, log_video, cfg, max_step=None, show_debug=False):
     list_render = []
     ep_stat_dict = {}
     ep_event_dict = {}
@@ -927,8 +928,14 @@ def run_single(run_name, env, agents_dict, agents_log_dir, log_video, cfg, max_s
         render_imgs = []
         for actor_id, agent in agents_dict.items():
             if log_video:
-                render_imgs.append(agent.render(
-                    info[actor_id]['reward_debug'], info[actor_id]['terminal_debug']))
+                debug_image = agent.render(
+                    info[actor_id]['reward_debug'], info[actor_id]['terminal_debug'])
+                render_imgs.append(debug_image)
+            if show_debug:
+                debug_image = agent.render(
+                    info[actor_id]['reward_debug'], info[actor_id]['terminal_debug'])
+                cv2.imshow('BEV', debug_image)
+                cv2.waitKey(1)
             if done[actor_id] and (actor_id not in ep_stat_dict):
                 ep_stat_dict[actor_id] = info[actor_id]['episode_stat']
                 ep_event_dict[actor_id] = info[actor_id]['episode_event']
@@ -1102,7 +1109,7 @@ def game_loop(cfg):
                 run_name = f"{env.task['weather']}_{env.task['route_id']:02d}"
 
                 list_render, ep_stat_dict, ep_event_dict, timestamp = run_single(
-                    run_name, env, agents_dict, agents_log_dir, cfg.log_video)
+                    run_name, env, agents_dict, agents_log_dir, cfg.log_video, cfg)
                 # log video
                 if cfg.log_video:
                     video_path = (video_dir / f'{run_name}.mp4').as_posix()
@@ -1135,7 +1142,7 @@ def game_loop(cfg):
             run_name = f"{env.task['weather']}_{env.task['route_id']:02d}"
 
             list_render, ep_stat_dict, ep_event_dict, timestamp = run_single(
-                run_name, env, agents_dict, agents_log_dir, cfg.log_video, cfg)
+                run_name, env, agents_dict, agents_log_dir, cfg.log_video, cfg, show_debug=cfg.show_debug)
             # log video
             if cfg.log_video:
                 video_path = (video_dir / f'{run_name}.mp4').as_posix()

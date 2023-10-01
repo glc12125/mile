@@ -95,7 +95,7 @@ class MileAgent:
         policy_input = self.preprocess_data(input_data)
         end_time = time.time()
         execution_time = end_time - start_time
-        if self.inference_counter > 50:
+        if self.inference_counter > 25:
             print("\t--- Preprocess time %s seconds ---" % (execution_time))
             self.preprocess_avg_time = (
                 self.preprocess_avg_time * self.inference_counter + execution_time) / (self.inference_counter + 1)
