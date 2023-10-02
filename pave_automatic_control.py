@@ -17,7 +17,10 @@ import re
 import weakref
 import carla
 from carla import ColorConverter as cc
+from agents.navigation.global_route_planner import GlobalRoutePlanner
+from agents.navigation.global_route_planner_dao import GlobalRoutePlannerDAO
 import cv2
+import matplotlib.pyplot as plt
 
 import math
 from queue import Queue
@@ -96,6 +99,7 @@ class World(object):
             sys.exit(1)
         self.hud = hud
         self.player = None
+        self.max_steering_angle = 70
         self.collision_sensor = None
         self.lane_invasion_sensor = None
         self.gnss_sensor = None
@@ -108,6 +112,8 @@ class World(object):
         self.world.on_tick(hud.on_world_tick)
         self.recording_enabled = False
         self.recording_start = 0
+        self._hop_resolution = 2
+        self._grp = None
 
         self._spectator = None
         # self._isDroneView = args.drone_view
@@ -176,6 +182,21 @@ class World(object):
             if actor.attributes.get('role_name') == 'hero':
                 self.player = actor
                 print("Found player")
+                physics_control = self.player.get_physics_control()
+                print("max steering angler for wheel 0: {}".format(
+                    physics_control.wheels[0].max_steer_angle))
+                if physics_control.wheels[0].max_steer_angle > 0:
+                    self.max_steering_angle = min(
+                        self.max_steering_angle, physics_control.wheels[0].max_steer_angle)
+                print("max steering angler for wheel 1: {}".format(
+                    physics_control.wheels[1].max_steer_angle))
+                if physics_control.wheels[1].max_steer_angle > 0:
+                    self.max_steering_angle = min(
+                        self.max_steering_angle, physics_control.wheels[1].max_steer_angle)
+                print("max steering angler for wheel 2: {}".format(
+                    physics_control.wheels[2].max_steer_angle))
+                print("max steering angler for wheel 3: {}".format(
+                    physics_control.wheels[3].max_steer_angle))
                 break
         if self.player is None:
             print("Cannot find player, will exit")
@@ -202,7 +223,7 @@ class World(object):
         self.hud.notification('Weather: %s' % preset[1])
         self.player.get_world().set_weather(preset[0])
 
-    def tick(self, clock):
+    def tick(self, clock, ego_loc_vector, ego_loc_vector_next):
         """Method for every tick"""
         # PAVE360: Added world tick for synchronous mode
         # self.world.tick()
@@ -224,11 +245,62 @@ class World(object):
                             x=deltax, y=deltay, z=20),
                         carla.Rotation(
                             pitch=rot.pitch-20, yaw=rot.yaw, roll=rot.roll)))
+        if len(ego_loc_vector) > 0:
+            ego_trans = self.player.get_transform()
+            start_waypoint = self.map.get_waypoint(ego_trans.location)
+            end_waypoint = self.map.get_waypoint(carla.Location(
+                float(ego_loc_vector[0]) + ego_trans.location.x, float(ego_loc_vector[1]) + ego_trans.location.y, ego_trans.location.z))
+            print('Ego Location:% 20s' % ('(% 5.1f, % 5.1f)' %
+                                          (ego_trans.location.x, ego_trans.location.y)))
+            print('Target Location:% 20s' % ('(% 5.1f, % 5.1f)' %
+                                             (end_waypoint.transform.location.x, end_waypoint.transform.location.y)))
+            route_trace = self._trace_route(start_waypoint, end_waypoint)
+            print("\n")
+            self._draw_waypoints(route_trace)
+            print("\n")
 
     def render(self, display):
         """Render world"""
         self.camera_manager.render(display)
         self.hud.render(display)
+
+    def _draw_waypoints(self, route):
+        lastx = 0
+        lasty = 0
+        lastz = 0
+        for (waypoint, _) in route:
+            # Avoid drawing duplicates ...
+            if waypoint.transform.location.x != lastx or waypoint.transform.location.y != lasty or waypoint.transform.location.z != lastz:
+                self.world.debug.draw_point(
+                    carla.Location(waypoint.transform.location.x,
+                                   waypoint.transform.location.y, 1.0),
+                    0.04, carla.Color(r=255, g=0, b=0), life_time=360.0)
+            # print("waypoint x: {}, y: {}, z: {}".format(waypoint.transform.location.x,
+            #      waypoint.transform.location.y, waypoint.transform.location.z))
+            lastx = waypoint.transform.location.x
+            lasty = waypoint.transform.location.y
+            lastz = waypoint.transform.location.z
+
+    def _trace_route(self, start_waypoint, end_waypoint):
+        """
+        This method sets up a global router and returns the optimal route
+        from start_waypoint to end_waypoint
+        """
+
+        # Setting up global router
+        if self._grp is None:
+            # carla 0.9.11 API uses DAO, it is deprecated in 0.9.12
+            dao = GlobalRoutePlannerDAO(self.map, self._hop_resolution)
+            grp = GlobalRoutePlanner(dao)
+            grp.setup()
+            self._grp = grp
+
+        # Obtain route plan
+        route = self._grp.trace_route(
+            start_waypoint.transform.location,
+            end_waypoint.transform.location)
+
+        return route
 
     def destroy_sensors(self):
         """Destroy sensors"""
@@ -886,6 +958,7 @@ def run_single(run_name, env, agents_dict, agents_log_dir, log_video, cfg, max_s
     # pygame related
     client = env._client
     carla_world = env._world
+    carla_map = env._map
     display = pygame.display.set_mode(
         (cfg.width, cfg.height), pygame.HWSURFACE | pygame.DOUBLEBUF)
     hud = HUD(cfg.width, cfg.height)
@@ -893,13 +966,15 @@ def run_single(run_name, env, agents_dict, agents_log_dir, log_video, cfg, max_s
     controller = KeyboardControl(world)
     clock = pygame.time.Clock()
     # End of pygame related
-
+    if show_debug:
+        fig = plt.figure()
     while not done['__all__']:
         end_to_end_start_time = time()
         start_time = end_to_end_start_time
         control_dict = {}
         for actor_id, agent in agents_dict.items():
-            control_dict[actor_id] = agent.run_step(obs[actor_id], timestamp)
+            control_dict[actor_id], gps_vector, gps_vector_next = agent.run_step(
+                obs[actor_id], timestamp)
 
         end_time = time()
         execution_time = end_time - start_time
@@ -911,7 +986,7 @@ def run_single(run_name, env, agents_dict, agents_log_dir, log_video, cfg, max_s
                   (model_inference_avg_time))
 
         start_time = time()
-        world.tick(clock)
+        world.tick(clock, gps_vector, gps_vector_next)
         world.render(display)
         pygame.display.flip()
         obs, reward, done, info = env.step(control_dict)
@@ -934,8 +1009,11 @@ def run_single(run_name, env, agents_dict, agents_log_dir, log_video, cfg, max_s
             if show_debug:
                 debug_image = agent.render(
                     info[actor_id]['reward_debug'], info[actor_id]['terminal_debug'])
-                cv2.imshow('BEV', debug_image)
-                cv2.waitKey(1)
+                # cv2.imshow('BEV', debug_image)
+                # cv2.waitKey(1)
+                fig.figimage(debug_image)
+                fig.canvas.draw()
+                plt.pause(0.001)
             if done[actor_id] and (actor_id not in ep_stat_dict):
                 ep_stat_dict[actor_id] = info[actor_id]['episode_stat']
                 ep_event_dict[actor_id] = info[actor_id]['episode_event']

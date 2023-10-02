@@ -28,14 +28,17 @@ class CarlaMultiAgentEnv(gym.Env):
 
         self.name = self.__class__.__name__
 
-        self._init_client(carla_map, host, port, seed=seed, no_rendering=no_rendering)
+        self._init_client(carla_map, host, port, seed=seed,
+                          no_rendering=no_rendering)
 
         # define observation spaces exposed to agent
         self._om_handler = ObsManagerHandler(obs_configs)
         # this contains all info related to reward, traffic lights violations etc
-        self._ev_handler = EgoVehicleHandler(self._client, reward_configs, terminal_configs)
+        self._ev_handler = EgoVehicleHandler(
+            self._client, reward_configs, terminal_configs)
         self._zw_handler = ZombieWalkerHandler(self._client)
-        self._zv_handler = ZombieVehicleHandler(self._client, tm_port=self._tm.get_port())
+        self._zv_handler = ZombieVehicleHandler(
+            self._client, tm_port=self._tm.get_port())
         self._sa_handler = ScenarioActorHandler(self._client)
         self._wt_handler = WeatherHandler(self._world)
 
@@ -78,13 +81,16 @@ class CarlaMultiAgentEnv(gym.Env):
         ev_spawn_locations = self._ev_handler.reset(self._task['ego_vehicles'])
         logger.debug("_ev_handler reset done!!")
 
-        self._sa_handler.reset(self._task['scenario_actors'], self._ev_handler.ego_vehicles)
+        self._sa_handler.reset(
+            self._task['scenario_actors'], self._ev_handler.ego_vehicles)
         logger.debug("_sa_handler reset done!!")
 
-        self._zw_handler.reset(self._task['num_zombie_walkers'], ev_spawn_locations)
+        self._zw_handler.reset(
+            self._task['num_zombie_walkers'], ev_spawn_locations)
         logger.debug("_zw_handler reset done!!")
 
-        self._zv_handler.reset(self._task['num_zombie_vehicles'], ev_spawn_locations)
+        self._zv_handler.reset(
+            self._task['num_zombie_vehicles'], ev_spawn_locations)
         logger.debug("_zv_handler reset done!!")
 
         self._om_handler.reset(self._ev_handler.ego_vehicles)
@@ -118,15 +124,18 @@ class CarlaMultiAgentEnv(gym.Env):
 
         # update timestamp
         snap_shot = self._world.get_snapshot()
-        self._timestamp['step'] = snap_shot.timestamp.frame-self._timestamp['start_frame']
+        self._timestamp['step'] = snap_shot.timestamp.frame - \
+            self._timestamp['start_frame']
         self._timestamp['frame'] = snap_shot.timestamp.frame
         self._timestamp['wall_time'] = snap_shot.timestamp.platform_timestamp
-        self._timestamp['relative_wall_time'] = self._timestamp['wall_time'] - self._timestamp['start_wall_time']
+        self._timestamp['relative_wall_time'] = self._timestamp['wall_time'] - \
+            self._timestamp['start_wall_time']
         self._timestamp['simulation_time'] = snap_shot.timestamp.elapsed_seconds
         self._timestamp['relative_simulation_time'] = self._timestamp['simulation_time'] \
             - self._timestamp['start_simulation_time']
 
-        reward_dict, done_dict, info_dict = self._ev_handler.tick(self.timestamp)
+        reward_dict, done_dict, info_dict = self._ev_handler.tick(
+            self.timestamp)
 
         # get observations
         obs_dict = self._om_handler.get_observation(self.timestamp)
@@ -153,6 +162,7 @@ class CarlaMultiAgentEnv(gym.Env):
 
         self._client = client
         self._world = client.load_world(carla_map)
+        self._map = self._world.get_map()
         self._tm = client.get_trafficmanager(port+6000)
 
         self.set_sync_mode(True)
