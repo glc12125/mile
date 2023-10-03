@@ -23,6 +23,7 @@ res: '1280x720'
 tm-port: 8000
 filter: 'vehicle.*'
 gamma: 2.2
+use_ekf: true
 
 # End of PAVE control parameters
 

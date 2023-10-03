@@ -208,7 +208,7 @@ def get_slope_force(vehicle_info, vehicle_status):
     return slope_force
 
 
-def get_vehicle_max_steering_angle(vehicle_info):
+def get_vehicle_max_steering_angle(vehicle):
     """
     Get the maximum steering angle of a carla vehicle
 
@@ -220,7 +220,8 @@ def get_vehicle_max_steering_angle(vehicle_info):
     # 70 degrees is the default max steering angle of a car
     max_steering_angle = math.radians(70)
     # get max steering angle (use smallest non-zero value of all wheels)
-    for wheel in vehicle_info.wheels:
+    wheels = vehicle.get_physics_control().wheels
+    for wheel in wheels:
         if wheel.max_steer_angle:
             if wheel.max_steer_angle and wheel.max_steer_angle < max_steering_angle:
                 max_steering_angle = wheel.max_steer_angle

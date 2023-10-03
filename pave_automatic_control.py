@@ -31,6 +31,7 @@ from stable_baselines3.common.vec_env.base_vec_env import tile_images
 
 from carla_gym.utils import config_utils
 from utils import server_utils
+from mile.utils import carla_utils, ekf
 from mile.agents.rl_birdview.utils.wandb_callback import WandbCallback
 from mile.constants import CARLA_FPS
 
@@ -108,6 +109,7 @@ class World(object):
         self._weather_index = 0
         self._actor_filter = args.filter
         self._gamma = args.gamma
+        self._ekf_ctra = None
         self.restart(args)
         self.world.on_tick(hud.on_world_tick)
         self.recording_enabled = False
@@ -182,21 +184,24 @@ class World(object):
             if actor.attributes.get('role_name') == 'hero':
                 self.player = actor
                 print("Found player")
-                physics_control = self.player.get_physics_control()
-                print("max steering angler for wheel 0: {}".format(
-                    physics_control.wheels[0].max_steer_angle))
-                if physics_control.wheels[0].max_steer_angle > 0:
-                    self.max_steering_angle = min(
-                        self.max_steering_angle, physics_control.wheels[0].max_steer_angle)
-                print("max steering angler for wheel 1: {}".format(
-                    physics_control.wheels[1].max_steer_angle))
-                if physics_control.wheels[1].max_steer_angle > 0:
-                    self.max_steering_angle = min(
-                        self.max_steering_angle, physics_control.wheels[1].max_steer_angle)
-                print("max steering angler for wheel 2: {}".format(
-                    physics_control.wheels[2].max_steer_angle))
-                print("max steering angler for wheel 3: {}".format(
-                    physics_control.wheels[3].max_steer_angle))
+                self.max_steering_angle = carla_utils.get_vehicle_max_steering_angle(
+                    self.player)
+                print("max steering angle: {}".format(self.max_steering_angle))
+                # physics_control = self.player.get_physics_control()
+                # print("max steering angler for wheel 0: {}".format(
+                #    physics_control.wheels[0].max_steer_angle))
+                # if physics_control.wheels[0].max_steer_angle > 0:
+                #    self.max_steering_angle = min(
+                #        self.max_steering_angle, physics_control.wheels[0].max_steer_angle)
+                # print("max steering angler for wheel 1: {}".format(
+                #    physics_control.wheels[1].max_steer_angle))
+                # if physics_control.wheels[1].max_steer_angle > 0:
+                #    self.max_steering_angle = min(
+                #        self.max_steering_angle, physics_control.wheels[1].max_steer_angle)
+                # print("max steering angler for wheel 2: {}".format(
+                #    physics_control.wheels[2].max_steer_angle))
+                # print("max steering angler for wheel 3: {}".format(
+                #    physics_control.wheels[3].max_steer_angle))
                 break
         if self.player is None:
             print("Cannot find player, will exit")
@@ -212,6 +217,8 @@ class World(object):
         actor_type = get_actor_display_name(self.player)
         self.hud.notification(actor_type)
 
+        if args.use_ekf:
+            self._ekf_ctra = ekf.EkfCtra(CARLA_FPS)
         # if args.drone_view or args.parasail_view:
         #    self._spectator = self.world.get_spectator()
 
@@ -223,7 +230,7 @@ class World(object):
         self.hud.notification('Weather: %s' % preset[1])
         self.player.get_world().set_weather(preset[0])
 
-    def tick(self, clock, ego_loc_vector, ego_loc_vector_next):
+    def tick(self, clock, ego_loc_vector, ego_loc_vector_next, controls):
         """Method for every tick"""
         # PAVE360: Added world tick for synchronous mode
         # self.world.tick()
@@ -250,13 +257,36 @@ class World(object):
             start_waypoint = self.map.get_waypoint(ego_trans.location)
             end_waypoint = self.map.get_waypoint(carla.Location(
                 float(ego_loc_vector[0]) + ego_trans.location.x, float(ego_loc_vector[1]) + ego_trans.location.y, ego_trans.location.z))
-            print('Ego Location:% 20s' % ('(% 5.1f, % 5.1f)' %
+            print('Ego position:% 20s' % ('(% 5.1f, % 5.1f)' %
                                           (ego_trans.location.x, ego_trans.location.y)))
-            print('Target Location:% 20s' % ('(% 5.1f, % 5.1f)' %
+            print('Target position:% 20s' % ('(% 5.1f, % 5.1f)' %
                                              (end_waypoint.transform.location.x, end_waypoint.transform.location.y)))
             route_trace = self._trace_route(start_waypoint, end_waypoint)
             print("\n")
             self._draw_waypoints(route_trace)
+            print("\n")
+        if self._ekf_ctra and controls:
+            # x, y, heading, speed, yawrate, longitudinal_acceleration
+            ego_trans = self.player.get_transform()
+            x = ego_trans.location.x
+            y = ego_trans.location.y
+            heading = -ego_trans.rotation.yaw + 90.0
+            speed = carla_utils.get_vehicle_lon_speed(self.player)
+            yawrate = controls.steer * self.max_steering_angle / CARLA_FPS
+            print("speed: {}".format(speed))
+            longitudinal_acceleration = carla_utils.get_vehicle_max_acceleration(self.player) * \
+                controls.throttle
+            self._ekf_ctra.update(x, y, heading/180.0*np.pi,
+                                  speed[0], yawrate, longitudinal_acceleration)
+            next_position = self._ekf_ctra.predict(yawrate)
+            print('EKF: next position:% 20s' % ('(% 5.1f, % 5.1f)' %
+                                                (next_position.item(0, 0), next_position.item(1, 0))))
+            start_waypoint = self.map.get_waypoint(ego_trans.location)
+            end_waypoint = self.map.get_waypoint(carla.Location(
+                float(next_position.item(0, 0)), next_position.item(1, 0), ego_trans.location.z))
+            route_trace = self._trace_route(start_waypoint, end_waypoint)
+            print("\n")
+            self._draw_waypoints(route_trace, red=0, green=255, blue=0)
             print("\n")
 
     def render(self, display):
@@ -264,7 +294,7 @@ class World(object):
         self.camera_manager.render(display)
         self.hud.render(display)
 
-    def _draw_waypoints(self, route):
+    def _draw_waypoints(self, route, red=255, green=0, blue=0):
         lastx = 0
         lasty = 0
         lastz = 0
@@ -274,7 +304,7 @@ class World(object):
                 self.world.debug.draw_point(
                     carla.Location(waypoint.transform.location.x,
                                    waypoint.transform.location.y, 1.0),
-                    0.04, carla.Color(r=255, g=0, b=0), life_time=360.0)
+                    0.04, carla.Color(r=red, g=green, b=blue), life_time=360.0)
             # print("waypoint x: {}, y: {}, z: {}".format(waypoint.transform.location.x,
             #      waypoint.transform.location.y, waypoint.transform.location.z))
             lastx = waypoint.transform.location.x
@@ -986,7 +1016,7 @@ def run_single(run_name, env, agents_dict, agents_log_dir, log_video, cfg, max_s
                   (model_inference_avg_time))
 
         start_time = time()
-        world.tick(clock, gps_vector, gps_vector_next)
+        world.tick(clock, gps_vector, gps_vector_next, control_dict[actor_id])
         world.render(display)
         pygame.display.flip()
         obs, reward, done, info = env.step(control_dict)

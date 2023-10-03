@@ -10,10 +10,10 @@ init_printing(use_latex=True)
 
 
 class EkfCtra(object):
-    def __init__(self):
+    def __init__(self, carla_fps):
         self._numstates = 6
-        self._dt = 1.0/10.0  # Sample Rate of the control signals is 10Hz
-        self._dtLocation = 1.0/25.0  # Sample Rate of location is 25Hz
+        # Sample Rate of the control signals is 10Hz
+        self._dt = 1.0/float(carla_fps)
         vs, psis, dpsis, dts, xs, ys, lats, lons, axs = symbols(
             'v \psi \dot\psi T x y lat lon a')
 
@@ -56,6 +56,7 @@ class EkfCtra(object):
 
         self._I = np.eye(self._numstates)
         print(self._I, self._I.shape)
+        self._first_state_initialized = False
 
     def init_sate(self, x, y, heading, speed, yawrate, longitudinal_acceleration):
         # heading: A heading of 0° means the Car is traveling north bound
@@ -68,6 +69,7 @@ class EkfCtra(object):
         self._x = np.matrix(
             [[x, y, heading, speed + 0.001, yawrate, longitudinal_acceleration]]).T
         print(self._x, self._x.shape)
+        self._first_state_initialized = True
 
     def predict(self, yawrate):
         # Time Update (Prediction)
@@ -76,12 +78,10 @@ class EkfCtra(object):
         # see "Dynamic Matrix"
         if np.abs(yawrate) < 0.0001:  # Driving straight
             self._x[4] = 0.0001
-        self._x[0] = self._x[0] + (1 / self._x[4]**2) * ((self._x[3]*self._x[4] + self._x[5] * self._x[4] * self._dt) *
-                                                         np.sin(self._x[2] + self._x[4] * self._dt) + self._x[5] * np.cos(self._x[2] + self._x[4] * self._dt) - self._x[3] *
-                                                         self._x[4] * np.sin(self._x[2]) - self._x[5] * np.cos(self._x[2]))
-        self._x[1] = self._x[1] + (1 / self._x[4]**2) * ((-self._x[3]*self._x[4] - self._x[5] * self._x[4] * self._dt) *
-                                                         np.cos(self._x[2] + self._x[4] * self._dt) + self._x[5] * np.sin(self._x[2] + self._x[4] * self._dt) + self._x[3] *
-                                                         self._x[4] * np.cos(self._x[2]) - self._x[5] * np.sin(self._x[2]))
+        self._x[0] = self._x[0] + (1 / self._x[4]**2) * ((self._x[3]*self._x[4] + self._x[5] * self._x[4] * self._dt) * np.sin(self._x[2] + self._x[4] * self._dt) +
+                                                         self._x[5] * np.cos(self._x[2] + self._x[4] * self._dt) - self._x[3] * self._x[4] * np.sin(self._x[2]) - self._x[5] * np.cos(self._x[2]))
+        self._x[1] = self._x[1] + (1 / self._x[4]**2) * ((-self._x[3]*self._x[4] - self._x[5] * self._x[4] * self._dt) * np.cos(self._x[2] + self._x[4] * self._dt) +
+                                                         self._x[5] * np.sin(self._x[2] + self._x[4] * self._dt) + self._x[3] * self._x[4] * np.cos(self._x[2]) - self._x[5] * np.sin(self._x[2]))
         self._x[2] = (self._x[2] + self._x[4] * self._dt +
                       np.pi) % (2.0 * np.pi) - np.pi
         self._x[3] = self._x[3] + self._x[5] * self._dt
@@ -129,6 +129,9 @@ class EkfCtra(object):
 
     def update(self, x, y, heading, speed, yawrate, longitudinal_acceleration):
 
+        if not self._first_state_initialized:
+            self.init_sate(x, y, heading, speed, yawrate,
+                           longitudinal_acceleration)
         # Measurement Update (Correction)
         # ===============================
         # Measurement Function
@@ -148,8 +151,8 @@ class EkfCtra(object):
         K = (self._P*JH.T) * np.linalg.inv(self._S)
 
         # Update the estimate via
-        Z = [x, y, heading, speed, yawrate,
-             longitudinal_acceleration].reshape(JH.shape[0], 1)
+        Z = np.array([x, y, speed, yawrate,
+                      longitudinal_acceleration]).reshape(JH.shape[0], 1)
         y = Z - (hx)                         # Innovation or Residual
         self._x = self._x + (K*y)
 
