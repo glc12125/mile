@@ -110,6 +110,7 @@ class World(object):
         self._actor_filter = args.filter
         self._gamma = args.gamma
         self._ekf_ctra = None
+        self._show_way = args.show_way
         self.restart(args)
         self.world.on_tick(hud.on_world_tick)
         self.recording_enabled = False
@@ -252,7 +253,7 @@ class World(object):
                             x=deltax, y=deltay, z=20),
                         carla.Rotation(
                             pitch=rot.pitch-20, yaw=rot.yaw, roll=rot.roll)))
-        if len(ego_loc_vector) > 0:
+        if self._show_way and len(ego_loc_vector) > 0:
             ego_trans = self.player.get_transform()
             start_waypoint = self.map.get_waypoint(ego_trans.location)
             end_waypoint = self.map.get_waypoint(carla.Location(
@@ -271,22 +272,29 @@ class World(object):
             x = ego_trans.location.x
             y = ego_trans.location.y
             heading = -ego_trans.rotation.yaw + 90.0
+            # heading = -ego_trans.rotation.yaw
+            print("carla yaw: {}, heading: {}".format(
+                ego_trans.rotation.yaw, heading))
             speed = carla_utils.get_vehicle_lon_speed(self.player)
-            yawrate = controls.steer * self.max_steering_angle / CARLA_FPS
+            yawrate = controls.steer * self.max_steering_angle
             print("speed: {}".format(speed))
+            print("yawrate: {}".format(yawrate))
             longitudinal_acceleration = carla_utils.get_vehicle_max_acceleration(self.player) * \
                 controls.throttle
             self._ekf_ctra.update(x, y, heading/180.0*np.pi,
                                   speed[0], yawrate, longitudinal_acceleration)
-            next_position = self._ekf_ctra.predict(yawrate)
-            print('EKF: next position:% 20s' % ('(% 5.1f, % 5.1f)' %
-                                                (next_position.item(0, 0), next_position.item(1, 0))))
-            start_waypoint = self.map.get_waypoint(ego_trans.location)
-            end_waypoint = self.map.get_waypoint(carla.Location(
-                float(next_position.item(0, 0)), next_position.item(1, 0), ego_trans.location.z))
-            route_trace = self._trace_route(start_waypoint, end_waypoint)
-            print("\n")
-            self._draw_waypoints(route_trace, red=0, green=255, blue=0)
+            print('Ego position:% 20s' % ('(% 5.1f, % 5.1f)' %
+                                          (ego_trans.location.x, ego_trans.location.y)))
+            for i in range(12):
+                next_position = self._ekf_ctra.predict(yawrate)
+                print('EKF: next position:% 20s' % ('(% 5.1f, % 5.1f), % 5.3f seconds ahead' %
+                                                    (next_position.item(0, 0), next_position.item(1, 0), (i + 1) * 1.0/float(CARLA_FPS))))
+                # start_waypoint = self.map.get_waypoint(ego_trans.location)
+                end_waypoint = self.map.get_waypoint(carla.Location(
+                    float(next_position.item(0, 0)), next_position.item(1, 0), ego_trans.location.z))
+                # route_trace = self._trace_route(start_waypoint, end_waypoint)
+                self._draw_waypoints([[end_waypoint, None]], red=0,
+                                     green=255, blue=0, life=-1)
             print("\n")
 
     def render(self, display):
@@ -294,7 +302,7 @@ class World(object):
         self.camera_manager.render(display)
         self.hud.render(display)
 
-    def _draw_waypoints(self, route, red=255, green=0, blue=0):
+    def _draw_waypoints(self, route, red=255, green=0, blue=0, life=360):
         lastx = 0
         lasty = 0
         lastz = 0
@@ -304,7 +312,7 @@ class World(object):
                 self.world.debug.draw_point(
                     carla.Location(waypoint.transform.location.x,
                                    waypoint.transform.location.y, 1.0),
-                    0.04, carla.Color(r=red, g=green, b=blue), life_time=360.0)
+                    0.04, carla.Color(r=red, g=green, b=blue), life_time=life)
             # print("waypoint x: {}, y: {}, z: {}".format(waypoint.transform.location.x,
             #      waypoint.transform.location.y, waypoint.transform.location.z))
             lastx = waypoint.transform.location.x

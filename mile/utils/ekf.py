@@ -27,14 +27,14 @@ class EkfCtra(object):
         self._state = Matrix([xs, ys, psis, vs, dpsis, axs])
         self._P = np.diag([1000.0, 1000.0, 1000.0, 1000.0, 1000.0, 1000.0])
         print(self._P, self._P.shape)
-        # assume 8.8m/s2 as maximum acceleration, forcing the vehicle
-        self._sGPS = 0.5*8.8*self._dt**2
+        # assume 3.0m/s2 as maximum acceleration, forcing the vehicle
+        self._sGPS = 0.5*3.0*self._dt**2
         self._sCourse = 0.1*self._dt  # assume 0.1rad/s as maximum turn rate for the vehicle
-        # assume 8.8m/s2 as maximum acceleration, forcing the vehicle
-        self._sVelocity = 8.8*self._dt
+        # assume 8.8.0m/s2 as maximum acceleration, forcing the vehicle
+        self._sVelocity = 3.0*self._dt
         # assume 1.0rad/s2 as the maximum turn rate acceleration for the vehicle
         self._sYaw = 1.0*self._dt
-        self._sAccel = 0.5
+        self._sAccel = 3.0
 
         self._Q = np.diag([self._sGPS**2, self._sGPS**2, self._sCourse **
                           2, self._sVelocity**2, self._sYaw**2, self._sAccel**2])
@@ -45,10 +45,10 @@ class EkfCtra(object):
                            [dpsis],
                            [axs]])
         self._JHs = self._hs.jacobian(self._state)
-        varGPS = 5.0  # Standard Deviation of GPS Measurement
-        varspeed = 3.0  # Variance of the speed measurement
-        varyaw = 0.1  # Variance of the yawrate measurement
-        varacc = 1.0  # Variance of the longitudinal Acceleration
+        varGPS = 0.00375  # Standard Deviation of GPS Measurement
+        varspeed = 0.001875  # Variance of the speed measurement
+        varyaw = 0.00015  # Variance of the yawrate measurement
+        varacc = 0.001875  # Variance of the longitudinal Acceleration
         self._R = np.diag(
             [varGPS**2, varGPS**2, varspeed**2, varyaw**2, varacc**2])
 

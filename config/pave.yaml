@@ -24,6 +24,7 @@ tm-port: 8000
 filter: 'vehicle.*'
 gamma: 2.2
 use_ekf: true
+show_way: false
 
 # End of PAVE control parameters
 
