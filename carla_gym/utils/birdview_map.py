@@ -298,7 +298,7 @@ if __name__ == '__main__':
         '--save_dir', default='carla_gym/core/obs_manager/birdview/maps')
     parser.add_argument('--pixels_per_meter', type=float, default=5.0)
     parser.add_argument('--carla_sh_path',
-                        default='/home/ubuntu/apps/carla/carla994/CarlaUE4.sh')
+                        default='/media/liangchuan/crucial/carla/CARLA_0.9.11/CarlaUE4.sh')
     # Those maps in the repo are generated using calra 0.9.9.4.
     # The maps have been slightly changed in carla 0.9.10/0.9.11
 
@@ -309,7 +309,7 @@ if __name__ == '__main__':
     kill_process.wait()
     time.sleep(1)
 
-    env_config = OmegaConf.load('config/train_envs/endless_all.yaml')
+    env_config = OmegaConf.load('config/test_suites/lb_data.yaml')
     server_manager = CarlaServerManager(args.carla_sh_path, configs=env_config)
     server_manager.start()
 
@@ -318,7 +318,7 @@ if __name__ == '__main__':
 
     os.environ['SDL_VIDEODRIVER'] = 'dummy'
     pygame.init()
-    display = pygame.display.set_mode((320, 320), 0, 32)
+    display = pygame.display.set_mode((192, 192), 0, 32)
     pygame.display.flip()
 
     pixels_per_meter = float(args.pixels_per_meter)

@@ -15,6 +15,8 @@ from .utils.dynamic_weather import WeatherHandler
 from stable_baselines3.common.utils import set_random_seed
 from mile.constants import CARLA_FPS
 
+from time import time
+
 logger = logging.getLogger(__name__)
 
 
@@ -55,6 +57,15 @@ class CarlaMultiAgentEnv(gym.Env):
         self._task_idx = 0
         self._shuffle_task = True
         self._task = self._all_tasks[self._task_idx].copy()
+
+        self._counter = 0
+        self._sa_handler_tick_avg_time = 0.0
+        self._ev_handler_control_avg_time = 0.0
+        self._world_tick_avg_time = 0.0
+        self._update_time_stamps = 0.0
+        self._ego_vehicle_tick = 0.0
+        self._get_obs_time = 0.0
+        self._weather_tick_time = 0.0
 
     def set_task_idx(self, task_idx):
         self._task_idx = task_idx
@@ -117,12 +128,43 @@ class CarlaMultiAgentEnv(gym.Env):
         return obs_dict
 
     def step(self, control_dict):
+        start_time = time()
         self._ev_handler.apply_control(control_dict)
+        end_time = time()
+        execution_time = end_time - start_time
+
+        print("\t\t--- EV handler apply control %s seconds ---" %
+              (execution_time))
+        self._ev_handler_control_avg_time = (
+            self._ev_handler_control_avg_time * self._counter + execution_time) / (self._counter + 1)
+        print("\t\t--- AVG EV handler apply control %s seconds ---" %
+              (self._ev_handler_control_avg_time))
+
+        start_time = time()
         self._sa_handler.tick()
+        end_time = time()
+        execution_time = end_time - start_time
+
+        print("\t\t--- Scenario actor tick %s seconds ---" % (execution_time))
+        self._ev_handler_control_avg_time = (
+            self._sa_handler_tick_avg_time * self._counter + execution_time) / (self._counter + 1)
+        print("\t\t--- AVG Scenario actor tick %s seconds ---" %
+              (self._sa_handler_tick_avg_time))
+
         # tick world
+        start_time = time()
         self._world.tick()
+        end_time = time()
+        execution_time = end_time - start_time
+
+        print("\t\t--- carla world tick %s seconds ---" % (execution_time))
+        self._world_tick_avg_time = (
+            self._world_tick_avg_time * self._counter + execution_time) / (self._counter + 1)
+        print("\t\t--- AVG carla world tick %s seconds ---" %
+              (self._world_tick_avg_time))
 
         # update timestamp
+        start_time = time()
         snap_shot = self._world.get_snapshot()
         self._timestamp['step'] = snap_shot.timestamp.frame - \
             self._timestamp['start_frame']
@@ -133,20 +175,56 @@ class CarlaMultiAgentEnv(gym.Env):
         self._timestamp['simulation_time'] = snap_shot.timestamp.elapsed_seconds
         self._timestamp['relative_simulation_time'] = self._timestamp['simulation_time'] \
             - self._timestamp['start_simulation_time']
+        end_time = time()
+        execution_time = end_time - start_time
 
+        print("\t\t--- update timestamps %s seconds ---" % (execution_time))
+        self._update_time_stamps = (
+            self._update_time_stamps * self._counter + execution_time) / (self._counter + 1)
+        print("\t\t--- AVG update timestamps %s seconds ---" %
+              (self._update_time_stamps))
+
+        start_time = time()
         reward_dict, done_dict, info_dict = self._ev_handler.tick(
             self.timestamp)
+        end_time = time()
+        execution_time = end_time - start_time
+
+        print("\t\t--- Ego Vehicle handler tick %s seconds ---" %
+              (execution_time))
+        self._ego_vehicle_tick = (
+            self._ego_vehicle_tick * self._counter + execution_time) / (self._counter + 1)
+        print("\t\t--- AVG Ego Vehicle handler tick %s seconds ---" %
+              (self._ego_vehicle_tick))
 
         # get observations
+        start_time = time()
         obs_dict = self._om_handler.get_observation(self.timestamp)
+        end_time = time()
+        execution_time = end_time - start_time
+
+        print("\t\t--- Get observation %s seconds ---" % (execution_time))
+        self._get_obs_time = (
+            self._get_obs_time * self._counter + execution_time) / (self._counter + 1)
+        print("\t\t--- AVG Get observation %s seconds ---" %
+              (self._get_obs_time))
 
         # update weather
+        start_time = time()
         self._wt_handler.tick(snap_shot.timestamp.delta_seconds)
+        end_time = time()
+        execution_time = end_time - start_time
 
+        print("\t\t--- weather tick %s seconds ---" % (execution_time))
+        self._weather_tick_time = (
+            self._weather_tick_time * self._counter + execution_time) / (self._counter + 1)
+        print("\t\t--- AVG weather tick %s seconds ---" %
+              (self._weather_tick_time))
         # num_walkers = len(self._world.get_actors().filter("*walker.pedestrian*"))
         # num_vehicles = len(self._world.get_actors().filter("vehicle*"))
         # logger.debug(f"num_walkers: {num_walkers}, num_vehicles: {num_vehicles}, ")
 
+        self._counter += 1
         return obs_dict, reward_dict, done_dict, info_dict
 
     def _init_client(self, carla_map, host, port, seed=2021, no_rendering=False):

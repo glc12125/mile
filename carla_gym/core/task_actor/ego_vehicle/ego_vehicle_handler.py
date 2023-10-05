@@ -34,18 +34,22 @@ class EgoVehicleHandler(object):
         ev_spawn_locations = []
         for ev_id in actor_config:
             bp_filter = actor_config[ev_id]['model']
-            blueprint = np.random.choice(self._world.get_blueprint_library().filter(bp_filter))
+            list_of_blueprints = self._world.get_blueprint_library().filter(bp_filter)
+            print("list_of_blueprints: {}".format(list_of_blueprints))
+            blueprint = np.random.choice(list_of_blueprints)
             blueprint.set_attribute('role_name', ev_id)
 
             if len(route_config[ev_id]) == 0:
-                spawn_transform = np.random.choice([x[1] for x in self._spawn_transforms])
+                spawn_transform = np.random.choice(
+                    [x[1] for x in self._spawn_transforms])
             else:
                 spawn_transform = route_config[ev_id][0]
 
             wp = self._map.get_waypoint(spawn_transform.location)
             spawn_transform.location.z = wp.transform.location.z + 1.321
 
-            carla_vehicle = self._world.try_spawn_actor(blueprint, spawn_transform)
+            carla_vehicle = self._world.try_spawn_actor(
+                blueprint, spawn_transform)
             self._world.tick()
 
             if endless_config is None:
@@ -53,7 +57,8 @@ class EgoVehicleHandler(object):
             else:
                 endless = endless_config[ev_id]
             target_transforms = route_config[ev_id][1:]
-            self.ego_vehicles[ev_id] = TaskVehicle(carla_vehicle, target_transforms, self._spawn_transforms, endless)
+            self.ego_vehicles[ev_id] = TaskVehicle(
+                carla_vehicle, target_transforms, self._spawn_transforms, endless)
 
             self.reward_handlers[ev_id] = self._build_instance(
                 self._reward_configs[ev_id], self.ego_vehicles[ev_id])
@@ -82,7 +87,8 @@ class EgoVehicleHandler(object):
     @staticmethod
     def _build_instance(config, ego_vehicle):
         module_str, class_str = config['entry_point'].split(':')
-        _Class = getattr(import_module('carla_gym.core.task_actor.ego_vehicle.'+module_str), class_str)
+        _Class = getattr(import_module(
+            'carla_gym.core.task_actor.ego_vehicle.'+module_str), class_str)
         return _Class(ego_vehicle, **config.get('kwargs', {}))
 
     def apply_control(self, control_dict):
@@ -95,8 +101,10 @@ class EgoVehicleHandler(object):
         for ev_id, ev in self.ego_vehicles.items():
             info_criteria = ev.tick(timestamp)
             info = info_criteria.copy()
-            done, timeout, terminal_reward, terminal_debug = self.terminal_handlers[ev_id].get(timestamp)
-            reward, reward_debug = self.reward_handlers[ev_id].get(terminal_reward)
+            done, timeout, terminal_reward, terminal_debug = self.terminal_handlers[ev_id].get(
+                timestamp)
+            reward, reward_debug = self.reward_handlers[ev_id].get(
+                terminal_reward)
 
             reward_dict[ev_id] = reward
             done_dict[ev_id] = done
@@ -110,39 +118,53 @@ class EgoVehicleHandler(object):
 
             if info['collision']:
                 if info['collision']['collision_type'] == 0:
-                    self.info_buffers[ev_id]['collisions_layout'].append(info['collision'])
+                    self.info_buffers[ev_id]['collisions_layout'].append(
+                        info['collision'])
                 elif info['collision']['collision_type'] == 1:
-                    self.info_buffers[ev_id]['collisions_vehicle'].append(info['collision'])
+                    self.info_buffers[ev_id]['collisions_vehicle'].append(
+                        info['collision'])
                 elif info['collision']['collision_type'] == 2:
-                    self.info_buffers[ev_id]['collisions_pedestrian'].append(info['collision'])
+                    self.info_buffers[ev_id]['collisions_pedestrian'].append(
+                        info['collision'])
                 else:
-                    self.info_buffers[ev_id]['collisions_others'].append(info['collision'])
+                    self.info_buffers[ev_id]['collisions_others'].append(
+                        info['collision'])
             if info['run_red_light']:
-                self.info_buffers[ev_id]['red_light'].append(info['run_red_light'])
+                self.info_buffers[ev_id]['red_light'].append(
+                    info['run_red_light'])
             if info['encounter_light']:
-                self.info_buffers[ev_id]['encounter_light'].append(info['encounter_light'])
+                self.info_buffers[ev_id]['encounter_light'].append(
+                    info['encounter_light'])
             if info['run_stop_sign']:
                 if info['run_stop_sign']['event'] == 'encounter':
-                    self.info_buffers[ev_id]['encounter_stop'].append(info['run_stop_sign'])
+                    self.info_buffers[ev_id]['encounter_stop'].append(
+                        info['run_stop_sign'])
                 elif info['run_stop_sign']['event'] == 'run':
-                    self.info_buffers[ev_id]['stop_infraction'].append(info['run_stop_sign'])
+                    self.info_buffers[ev_id]['stop_infraction'].append(
+                        info['run_stop_sign'])
             if info['route_deviation']:
-                self.info_buffers[ev_id]['route_dev'].append(info['route_deviation'])
+                self.info_buffers[ev_id]['route_dev'].append(
+                    info['route_deviation'])
             if info['blocked']:
-                self.info_buffers[ev_id]['vehicle_blocked'].append(info['blocked'])
+                self.info_buffers[ev_id]['vehicle_blocked'].append(
+                    info['blocked'])
             if info['outside_route_lane']:
                 if info['outside_route_lane']['outside_lane']:
-                    self.info_buffers[ev_id]['outside_lane'].append(info['outside_route_lane'])
+                    self.info_buffers[ev_id]['outside_lane'].append(
+                        info['outside_route_lane'])
                 if info['outside_route_lane']['wrong_lane']:
-                    self.info_buffers[ev_id]['wrong_lane'].append(info['outside_route_lane'])
+                    self.info_buffers[ev_id]['wrong_lane'].append(
+                        info['outside_route_lane'])
             # save episode summary
             if done:
                 info_dict[ev_id]['episode_event'] = self.info_buffers[ev_id]
                 info_dict[ev_id]['episode_event']['timeout'] = info['timeout']
                 info_dict[ev_id]['episode_event']['route_completion'] = info['route_completion']
 
-                total_length = float(info['route_completion']['route_length_in_m']) / 1000
-                completed_length = float(info['route_completion']['route_completed_in_m']) / 1000
+                total_length = float(
+                    info['route_completion']['route_length_in_m']) / 1000
+                completed_length = float(
+                    info['route_completion']['route_completed_in_m']) / 1000
                 total_length = max(total_length, 0.001)
                 completed_length = max(completed_length, 0.001)
 
@@ -159,15 +181,23 @@ class EgoVehicleHandler(object):
                     else:
                         score_route = completed_length / total_length
 
-                n_collisions_layout = int(len(self.info_buffers[ev_id]['collisions_layout']))
-                n_collisions_vehicle = int(len(self.info_buffers[ev_id]['collisions_vehicle']))
-                n_collisions_pedestrian = int(len(self.info_buffers[ev_id]['collisions_pedestrian']))
-                n_collisions_others = int(len(self.info_buffers[ev_id]['collisions_others']))
+                n_collisions_layout = int(
+                    len(self.info_buffers[ev_id]['collisions_layout']))
+                n_collisions_vehicle = int(
+                    len(self.info_buffers[ev_id]['collisions_vehicle']))
+                n_collisions_pedestrian = int(
+                    len(self.info_buffers[ev_id]['collisions_pedestrian']))
+                n_collisions_others = int(
+                    len(self.info_buffers[ev_id]['collisions_others']))
                 n_red_light = int(len(self.info_buffers[ev_id]['red_light']))
-                n_encounter_light = int(len(self.info_buffers[ev_id]['encounter_light']))
-                n_stop_infraction = int(len(self.info_buffers[ev_id]['stop_infraction']))
-                n_encounter_stop = int(len(self.info_buffers[ev_id]['encounter_stop']))
-                n_collisions = n_collisions_layout + n_collisions_vehicle + n_collisions_pedestrian + n_collisions_others
+                n_encounter_light = int(
+                    len(self.info_buffers[ev_id]['encounter_light']))
+                n_stop_infraction = int(
+                    len(self.info_buffers[ev_id]['stop_infraction']))
+                n_encounter_stop = int(
+                    len(self.info_buffers[ev_id]['encounter_stop']))
+                n_collisions = n_collisions_layout + n_collisions_vehicle + \
+                    n_collisions_pedestrian + n_collisions_others
 
                 score_penalty = 1.0 * (1 - (outside_lane_length+wrong_lane_length)/completed_length) \
                     * (PENALTY_COLLISION_STATIC ** n_collisions_layout) \
@@ -236,7 +266,8 @@ class EgoVehicleHandler(object):
                 spawn_transforms.append([wp_prev.road_id, wp_prev.transform])
                 if c_map.name == 'Town03' and (wp_prev.road_id == 44):
                     for _ in range(100):
-                        spawn_transforms.append([wp_prev.road_id, wp_prev.transform])
+                        spawn_transforms.append(
+                            [wp_prev.road_id, wp_prev.transform])
                 # while wp_next.is_junction:
                 #     wp_next = wp_next.next(1.0)[0]
 

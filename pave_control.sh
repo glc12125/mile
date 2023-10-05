@@ -1,6 +1,12 @@
-#bash run/inference.sh /root/media/crucial/carla/CARLA_0.9.11/CarlaUE4.sh /home/Development/mile/'mile.ckpt' 2000
+CARLA_VERSION="$1"
 
-python -u pave_automatic_control.py --config-name pave carla_sh_path=/root/media/crucial/carla/CARLA_0.9.11/CarlaUE4.sh agent.mile.ckpt=/home/Development/mile/mile.ckpt port=2000 +mode='single'
+if [ "$CARLA_VERSION" = "11" ]; then
+    python -u pave_automatic_control.py --config-name pave carla_sh_path=/root/media/crucial/carla/CARLA_0.9.11/CarlaUE4.sh agent.mile.ckpt=/home/Development/mile/mile.ckpt port=2000 +mode='single'
+fi
+
+if [ "$CARLA_VERSION" = "14" ]; then
+    python -u pave_automatic_control.0.9.14.py --config-name pave carla_sh_path=/root/media/crucial/carla/CARLA_0.9.14/CarlaUE4.sh agent.mile.ckpt=/home/Development/mile/mile.ckpt port=2000 +mode='single'
+fi
 
 
 echo "Bash script done."

@@ -61,7 +61,8 @@ class ObsManager(ObsManagerBase):
         })
 
     def attach_ego_vehicle(self, parent_actor):
-        init_obs = np.zeros([self._height, self._width, self._channels], dtype=np.uint8)
+        init_obs = np.zeros(
+            [self._height, self._width, self._channels], dtype=np.uint8)
         self._image_queue = Queue()
 
         self._world = parent_actor.vehicle.get_world()
@@ -79,7 +80,8 @@ class ObsManager(ObsManagerBase):
             bp.set_attribute('chromatic_aberration_intensity', str(0.5))
             bp.set_attribute('chromatic_aberration_offset', str(0))
 
-        self._sensor = self._world.spawn_actor(bp, self._camera_transform, attach_to=parent_actor.vehicle)
+        self._sensor = self._world.spawn_actor(
+            bp, self._camera_transform, attach_to=parent_actor.vehicle)
         weak_self = weakref.ref(self)
         self._sensor.listen(lambda image: self._parse_image(weak_self, image))
 
@@ -87,7 +89,7 @@ class ObsManager(ObsManagerBase):
         snap_shot = self._world.get_snapshot()
         assert self._image_queue.qsize() <= 1
 
-        try: 
+        try:
             frame, data = self._image_queue.get(True, self._queue_timeout)
             assert snap_shot.frame == frame
         except Empty:
@@ -113,7 +115,8 @@ class ObsManager(ObsManagerBase):
 
         np_img = np.frombuffer(carla_image.raw_data, dtype=np.dtype("uint8"))
 
-        np_img = copy.deepcopy(np_img)
+        # making a deep copy is not necessary for now, since, it is processed sequentially by the model
+        # np_img = copy.deepcopy(np_img)
 
         np_img = np.reshape(np_img, (carla_image.height, carla_image.width, 4))
         np_img = np_img[:, :, :3]
