@@ -1,5 +1,5 @@
 defaults:
-  - test_suites: lb_test
+  - test_suites: pave_demo
   - agent: mile
   - _self_
 
@@ -23,7 +23,7 @@ res: '1280x720'
 tm-port: 8000
 filter: 'vehicle.*'
 gamma: 2.2
-use_ekf: true
+use_ekf: false
 show_way: false
 
 # End of PAVE control parameters
