@@ -66,6 +66,12 @@ class CarlaMultiAgentEnv(gym.Env):
         self._ego_vehicle_tick = 0.0
         self._get_obs_time = 0.0
         self._weather_tick_time = 0.0
+        self._show_stats = False
+
+    def show_stats(self, show_stats=False):
+        print("Carla Gym stats flag: {}".format(show_stats))
+        self._show_stats = show_stats
+        self._om_handler.show_stats(show_stats)
 
     def set_task_idx(self, task_idx):
         self._task_idx = task_idx
@@ -133,23 +139,25 @@ class CarlaMultiAgentEnv(gym.Env):
         end_time = time()
         execution_time = end_time - start_time
 
-        print("\t\t--- EV handler apply control %s seconds ---" %
-              (execution_time))
-        self._ev_handler_control_avg_time = (
-            self._ev_handler_control_avg_time * self._counter + execution_time) / (self._counter + 1)
-        print("\t\t--- AVG EV handler apply control %s seconds ---" %
-              (self._ev_handler_control_avg_time))
+        if self._show_stats:
+            print("\t\t--- EV handler apply control %s seconds ---" %
+                  (execution_time))
+            self._ev_handler_control_avg_time = (
+                self._ev_handler_control_avg_time * self._counter + execution_time) / (self._counter + 1)
+            print("\t\t--- AVG EV handler apply control %s seconds ---" %
+                  (self._ev_handler_control_avg_time))
 
         start_time = time()
         self._sa_handler.tick()
         end_time = time()
         execution_time = end_time - start_time
-
-        print("\t\t--- Scenario actor tick %s seconds ---" % (execution_time))
-        self._ev_handler_control_avg_time = (
-            self._sa_handler_tick_avg_time * self._counter + execution_time) / (self._counter + 1)
-        print("\t\t--- AVG Scenario actor tick %s seconds ---" %
-              (self._sa_handler_tick_avg_time))
+        if self._show_stats:
+            print("\t\t--- Scenario actor tick %s seconds ---" %
+                  (execution_time))
+            self._ev_handler_control_avg_time = (
+                self._sa_handler_tick_avg_time * self._counter + execution_time) / (self._counter + 1)
+            print("\t\t--- AVG Scenario actor tick %s seconds ---" %
+                  (self._sa_handler_tick_avg_time))
 
         # tick world
         start_time = time()
@@ -157,11 +165,12 @@ class CarlaMultiAgentEnv(gym.Env):
         end_time = time()
         execution_time = end_time - start_time
 
-        print("\t\t--- carla world tick %s seconds ---" % (execution_time))
-        self._world_tick_avg_time = (
-            self._world_tick_avg_time * self._counter + execution_time) / (self._counter + 1)
-        print("\t\t--- AVG carla world tick %s seconds ---" %
-              (self._world_tick_avg_time))
+        if self._show_stats:
+            print("\t\t--- carla world tick %s seconds ---" % (execution_time))
+            self._world_tick_avg_time = (
+                self._world_tick_avg_time * self._counter + execution_time) / (self._counter + 1)
+            print("\t\t--- AVG carla world tick %s seconds ---" %
+                  (self._world_tick_avg_time))
 
         # update timestamp
         start_time = time()
@@ -178,11 +187,13 @@ class CarlaMultiAgentEnv(gym.Env):
         end_time = time()
         execution_time = end_time - start_time
 
-        print("\t\t--- update timestamps %s seconds ---" % (execution_time))
-        self._update_time_stamps = (
-            self._update_time_stamps * self._counter + execution_time) / (self._counter + 1)
-        print("\t\t--- AVG update timestamps %s seconds ---" %
-              (self._update_time_stamps))
+        if self._show_stats:
+            print("\t\t--- update timestamps %s seconds ---" %
+                  (execution_time))
+            self._update_time_stamps = (
+                self._update_time_stamps * self._counter + execution_time) / (self._counter + 1)
+            print("\t\t--- AVG update timestamps %s seconds ---" %
+                  (self._update_time_stamps))
 
         start_time = time()
         reward_dict, done_dict, info_dict = self._ev_handler.tick(
@@ -190,12 +201,13 @@ class CarlaMultiAgentEnv(gym.Env):
         end_time = time()
         execution_time = end_time - start_time
 
-        print("\t\t--- Ego Vehicle handler tick %s seconds ---" %
-              (execution_time))
-        self._ego_vehicle_tick = (
-            self._ego_vehicle_tick * self._counter + execution_time) / (self._counter + 1)
-        print("\t\t--- AVG Ego Vehicle handler tick %s seconds ---" %
-              (self._ego_vehicle_tick))
+        if self._show_stats:
+            print("\t\t--- Ego Vehicle handler tick %s seconds ---" %
+                  (execution_time))
+            self._ego_vehicle_tick = (
+                self._ego_vehicle_tick * self._counter + execution_time) / (self._counter + 1)
+            print("\t\t--- AVG Ego Vehicle handler tick %s seconds ---" %
+                  (self._ego_vehicle_tick))
 
         # get observations
         start_time = time()
@@ -203,11 +215,12 @@ class CarlaMultiAgentEnv(gym.Env):
         end_time = time()
         execution_time = end_time - start_time
 
-        print("\t\t--- Get observation %s seconds ---" % (execution_time))
-        self._get_obs_time = (
-            self._get_obs_time * self._counter + execution_time) / (self._counter + 1)
-        print("\t\t--- AVG Get observation %s seconds ---" %
-              (self._get_obs_time))
+        if self._show_stats:
+            print("\t\t--- Get observation %s seconds ---" % (execution_time))
+            self._get_obs_time = (
+                self._get_obs_time * self._counter + execution_time) / (self._counter + 1)
+            print("\t\t--- AVG Get observation %s seconds ---" %
+                  (self._get_obs_time))
 
         # update weather
         start_time = time()
@@ -215,11 +228,12 @@ class CarlaMultiAgentEnv(gym.Env):
         end_time = time()
         execution_time = end_time - start_time
 
-        print("\t\t--- weather tick %s seconds ---" % (execution_time))
-        self._weather_tick_time = (
-            self._weather_tick_time * self._counter + execution_time) / (self._counter + 1)
-        print("\t\t--- AVG weather tick %s seconds ---" %
-              (self._weather_tick_time))
+        if self._show_stats:
+            print("\t\t--- weather tick %s seconds ---" % (execution_time))
+            self._weather_tick_time = (
+                self._weather_tick_time * self._counter + execution_time) / (self._counter + 1)
+            print("\t\t--- AVG weather tick %s seconds ---" %
+                  (self._weather_tick_time))
         # num_walkers = len(self._world.get_actors().filter("*walker.pedestrian*"))
         # num_vehicles = len(self._world.get_actors().filter("vehicle*"))
         # logger.debug(f"num_walkers: {num_walkers}, num_vehicles: {num_vehicles}, ")

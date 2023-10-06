@@ -26,6 +26,7 @@ class MileAgent:
         self.metrics_avg_time = 0.0
         self.render_avg_time = 0.0
         self.inference_counter = 0
+        self._show_stats = False
 
     def setup(self, path_to_conf_file):
         cfg = OmegaConf.load(path_to_conf_file)
@@ -92,13 +93,16 @@ class MileAgent:
 
         self.warm_start = 25
 
+    def show_stats(self, show_stats=False):
+        self._show_stats = show_stats
+
     def run_step(self, input_data, timestamp):
         start_time = time.time()
         policy_input, gps_vector, gps_vector_next = self.preprocess_data(
             input_data)
         end_time = time.time()
         execution_time = end_time - start_time
-        if self.inference_counter >= self.warm_start:
+        if self.inference_counter >= self.warm_start and self._show_stats:
             print("\t--- Preprocess time %s seconds ---" % (execution_time))
             self.preprocess_avg_time = (
                 self.preprocess_avg_time * self.inference_counter + execution_time) / (self.inference_counter + 1)
@@ -115,15 +119,15 @@ class MileAgent:
                 output = self._policy(policy_input, deployment=True)
             end_time = time.time()
             execution_time = end_time - start_time
-            if self.inference_counter >= self.warm_start:
+            if self.inference_counter >= self.warm_start and self._show_stats:
                 print("\t--- Inferencing time %s seconds ---" %
                       (execution_time))
                 self.inference_avg_time = (
                     self.inference_avg_time * self.inference_counter + execution_time) / (self.inference_counter + 1)
                 print("\t--- AVG Inferencing time %s seconds ---" %
                       (self.inference_avg_time))
-            else:
-                print("Skipping frame %s" % (self.inference_counter))
+            elif self._show_stats:
+                print("\t--- Skipping frame %s" % (self.inference_counter))
 
         start_time = time.time()
         actions = torch.cat(
@@ -134,7 +138,7 @@ class MileAgent:
         self.action_queue.append(torch.from_numpy(actions).cuda())
         end_time = time.time()
         execution_time = end_time - start_time
-        if self.inference_counter >= self.warm_start:
+        if self.inference_counter >= self.warm_start and self._show_stats:
             print("\t--- Postprocess time %s seconds ---" % (execution_time))
             self.postprocess_avg_time = (
                 self.postprocess_avg_time * self.inference_counter + execution_time) / (self.inference_counter + 1)
@@ -145,7 +149,7 @@ class MileAgent:
         # metrics = self.forward_metrics(policy_input, output)
         end_time = time.time()
         execution_time = end_time - start_time
-        if self.inference_counter >= self.warm_start:
+        if self.inference_counter >= self.warm_start and self._show_stats:
             print("\t--- Forward metrics time %s seconds ---" %
                   (execution_time))
             self.metrics_avg_time = (
@@ -160,12 +164,12 @@ class MileAgent:
                                None, timestamp, is_dreaming)
         end_time = time.time()
         execution_time = end_time - start_time
-        if self.inference_counter >= self.warm_start:
+        if self.inference_counter >= self.warm_start and self._show_stats:
             print("\t--- Prepare rendering time %s seconds ---" %
                   (execution_time))
             self.render_avg_time = (
                 self.render_avg_time * self.inference_counter + execution_time) / (self.inference_counter + 1)
-            print("\t--- AVG Prepare rendering time %s seconds ---\n" %
+            print("\t--- AVG Prepare rendering time %s seconds ---" %
                   (self.render_avg_time))
         self.inference_counter += 1
         return control, gps_vector, gps_vector_next
@@ -180,16 +184,18 @@ class MileAgent:
             input_data['gnss']['target_gps'],
             input_data['gnss']['imu'],
         )
-        print("preprocess_data: route_command: {}, gps_vector: {}".format(
-            route_command, gps_vector))
+        if self._show_stats:
+            print("\t--- preprocess_data: route_command: {}, gps_vector: {}".format(
+                route_command, gps_vector))
         route_command_next, gps_vector_next = preprocess_measurements(
             input_data['gnss']['command_next'].squeeze(0),
             input_data['gnss']['gnss'],
             input_data['gnss']['target_gps_next'],
             input_data['gnss']['imu'],
         )
-        print("preprocess_data: route_command_next: {}, gps_vector_next: {}".format(
-            route_command_next, gps_vector_next))
+        if self._show_stats:
+            print("\t--- preprocess_data: route_command_next: {}, gps_vector_next: {}".format(
+                route_command_next, gps_vector_next))
 
         birdview, route_map = preprocess_birdview_and_routemap(
             torch.from_numpy(input_data['birdview']['masks']).cuda())

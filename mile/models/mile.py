@@ -471,7 +471,7 @@ class Mile(nn.Module):
             bev_decoder_output = unpack_sequence_dim(bev_decoder_output, b, s)
             output = {**output, **bev_decoder_output}
 
-        pprint(output.keys())
+        # pprint(output.keys())
         # bev_prediction_1 = output['bev_segmentation_1'].detach()
         # bev_prediction_1 = torch.argmax(bev_prediction_1, dim=2)[:, -1]
         # ts.show(bev_prediction_1)

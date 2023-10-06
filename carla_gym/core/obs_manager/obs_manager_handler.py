@@ -6,19 +6,23 @@ from time import time
 from multiprocessing import Process
 import threading
 
+g_show_stats = False
+
 
 def task(obs_dict, ev_id, obs_id, om):
     start_time = time()
     obs_dict[ev_id][obs_id] = om.get_observation()
     end_time = time()
     execution_time = end_time - start_time
-    print("\t\t\t--- observation %s took %s seconds ---" %
-          (obs_id, execution_time))
+    if g_show_stats:
+        print("\t\t\t\t--- observation %s took %s seconds ---" %
+              (obs_id, execution_time))
 
 
 def run_in_thread(obs_dict, ev_id, obs_id, om):
     t = threading.Thread(target=task, args=(obs_dict, ev_id, obs_id, om))
-    print(f"Created Thread: {t}")
+    if g_show_stats:
+        print(f"\t\t\t--- Created Thread: {t}")
     t.start()
     return t
 
@@ -29,6 +33,10 @@ class ObsManagerHandler(object):
         self._obs_managers = {}
         self._obs_configs = obs_configs
         self._init_obs_managers()
+
+    def show_stats(self, show_stats=False):
+        global g_show_stats
+        g_show_stats = show_stats
 
     def get_observation_process(self, timestamp):
         obs_dict = {}

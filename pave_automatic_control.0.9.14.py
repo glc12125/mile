@@ -181,7 +181,7 @@ class World(object):
         #    self.player = self.world.try_spawn_actor(blueprint, spawn_point)
 
         for actor in self.world.get_actors().filter('vehicle.*'):
-            print("actor attributes: {}".format(actor.attributes))
+            # print("actor attributes: {}".format(actor.attributes))
             if actor.attributes.get('role_name') == 'hero':
                 self.player = actor
                 print("Found player")
@@ -975,15 +975,16 @@ def log_video_task(videos, info, actor_id, render_func):
     videos.append(debug_image)
 
 
-def run_log_video_thread(videos, info, actor_id, render_func):
+def run_log_video_thread(videos, info, actor_id, render_func, show_stats=False):
     t = threading.Thread(target=log_video_task, args=(
         videos, info, actor_id, render_func))
-    print(f"Created Thread: {t}")
+    if show_stats:
+        print(f"\t--- Created Thread: {t}")
     t.start()
     return t
 
 
-def run_single(run_name, env, agents_dict, agents_log_dir, log_video, cfg, max_step=None, show_debug=False):
+def run_single(run_name, env, agents_dict, agents_log_dir, log_video, cfg, max_step=None, show_debug=False, show_stats=False):
     list_render = []
     ep_stat_dict = {}
     ep_event_dict = {}
@@ -992,7 +993,7 @@ def run_single(run_name, env, agents_dict, agents_log_dir, log_video, cfg, max_s
         log_dir.mkdir(parents=True, exist_ok=True)
         agent.reset(log_dir / f'{run_name}.log')
 
-    log.info(f'Start Benchmarking {run_name}.')
+    log.info(f'Start Scenario {run_name}.')
     obs = env.reset()
     timestamp = env.timestamp
     done = {'__all__': False}
@@ -1020,21 +1021,27 @@ def run_single(run_name, env, agents_dict, agents_log_dir, log_video, cfg, max_s
     if show_debug:
         fig = plt.figure()
     while not done['__all__']:
+        if controller.parse_events(world):
+            return
         end_to_end_start_time = time()
         start_time = end_to_end_start_time
         control_dict = {}
         log_video_thread = None
+        if counter >= warm_start and show_stats:
+            print("\n")
+            print("="*50)
         for actor_id, agent in agents_dict.items():
             control_dict[actor_id], gps_vector, gps_vector_next = agent.run_step(
                 obs[actor_id], timestamp)
 
         end_time = time()
         execution_time = end_time - start_time
-        if counter >= warm_start:
-            print("--- Model inference time %s seconds ---" % (execution_time))
+        if counter >= warm_start and show_stats:
+            print("--- (The above contributes to) Model inference time %s seconds ---" %
+                  (execution_time))
             model_inference_avg_time = (
                 model_inference_avg_time * counter + execution_time) / (counter + 1)
-            print("--- AVG Model inference time %s seconds ---" %
+            print("--- AVG Model inference time %s seconds ---\n" %
                   (model_inference_avg_time))
 
         start_time = time()
@@ -1044,11 +1051,12 @@ def run_single(run_name, env, agents_dict, agents_log_dir, log_video, cfg, max_s
         obs, reward, done, info = env.step(control_dict)
         end_time = time()
         execution_time = end_time - start_time
-        if counter >= warm_start:
-            print("--- Env step time %s seconds ---" % (execution_time))
+        if counter >= warm_start and show_stats:
+            print("--- (The above contributes to) Env step time %s seconds ---" %
+                  (execution_time))
             env_step_avg_time = (
                 env_step_avg_time * counter + execution_time) / (counter + 1)
-            print("--- AVG Env step time %s seconds ---" %
+            print("--- AVG Env step time %s seconds ---\n" %
                   (env_step_avg_time))
 
         start_time = time()
@@ -1059,7 +1067,7 @@ def run_single(run_name, env, agents_dict, agents_log_dir, log_video, cfg, max_s
                 #    info[actor_id]['reward_debug'], info[actor_id]['terminal_debug'])
                 # render_imgs.append(debug_image)
                 log_video_thread = run_log_video_thread(
-                    render_imgs, info, actor_id, agent.render)
+                    render_imgs, info, actor_id, agent.render, show_stats)
             if show_debug:
                 debug_image = agent.render(
                     info[actor_id]['reward_debug'], info[actor_id]['terminal_debug'])
@@ -1078,7 +1086,7 @@ def run_single(run_name, env, agents_dict, agents_log_dir, log_video, cfg, max_s
                 #    **ep_stat_dict[actor_id], **custom_metrics}
         end_time = time()
         execution_time = end_time - start_time
-        if counter >= warm_start:
+        if counter >= warm_start and show_stats:
             print("--- Render&Stats process time %s seconds ---" %
                   (execution_time))
             render_stats_process_avg_time = (
@@ -1098,12 +1106,13 @@ def run_single(run_name, env, agents_dict, agents_log_dir, log_video, cfg, max_s
 
         end_to_end_end_time = time()
         execution_time = end_to_end_end_time - end_to_end_start_time
-        if counter >= warm_start:
+        if counter >= warm_start and show_stats:
             print("--- End to end time %s seconds ---" % (execution_time))
             end_to_end_avg_time = (
                 end_to_end_avg_time * counter + execution_time) / (counter + 1)
             print("--- AVG end to end time %s seconds ---" %
                   (end_to_end_avg_time))
+            print("="*50)
         counter += 1
         if counter == warm_start:
             t0 = time()
@@ -1179,6 +1188,7 @@ def game_loop(cfg):
         OmegaConf.save(config=cfg_agent, f='config_agent.yaml')
         AgentClass = config_utils.load_entry_point(cfg_agent.entry_point)
         agents_dict[ev_id] = AgentClass('config_agent.yaml')
+        agents_dict[ev_id].show_stats(cfg.show_stats)
         obs_configs[ev_id] = agents_dict[ev_id].obs_configs
 
         # get obs_configs from agent
@@ -1229,6 +1239,7 @@ def game_loop(cfg):
 
     print("There are {} tasks in env {}".format(
         env.num_tasks, env_setup['env_id']))
+    env.show_stats(cfg.show_stats)
 
     # pygame initialization
     pygame.init()
@@ -1275,7 +1286,7 @@ def game_loop(cfg):
             run_name = f"{env.task['weather']}_{env.task['route_id']:02d}"
 
             list_render, ep_stat_dict, ep_event_dict, timestamp = run_single(
-                run_name, env, agents_dict, agents_log_dir, cfg.log_video, cfg, show_debug=cfg.show_debug)
+                run_name, env, agents_dict, agents_log_dir, cfg.log_video, cfg, show_debug=cfg.show_debug, show_stats=cfg.show_stats)
             # log video
             if cfg.log_video:
                 video_path = (video_dir / f'{run_name}.mp4').as_posix()

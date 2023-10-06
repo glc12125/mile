@@ -47,6 +47,7 @@ class ObsManager(ObsManagerBase):
         self._history_idx = obs_configs['history_idx']
         self._scale_bbox = obs_configs.get('scale_bbox', True)
         self._scale_mask_col = obs_configs.get('scale_mask_col', 1.1)
+        self._show_stats = obs_configs.get('show_stats', False)
 
         self._history_queue = deque(maxlen=20)
 
@@ -137,20 +138,21 @@ class ObsManager(ObsManagerBase):
             return c_distance and (not c_ev)
         end_time = time()
         execution_time = end_time - start_time
-        print("\t\t\t\t--- Get transformation time %s seconds ---" %
-              (execution_time))
-        self._get_transformation_time = (
-            self._get_transformation_time * self._counter + execution_time) / (self._counter + 1)
-        print("\t\t\t\t--- AVG get transformation time %s seconds ---" %
-              (self._get_transformation_time))
+        if self._show_stats:
+            print("\t\t--- Get transformation time %s seconds ---" %
+                  (execution_time))
+            self._get_transformation_time = (
+                self._get_transformation_time * self._counter + execution_time) / (self._counter + 1)
+            print("\t\t--- AVG get transformation time %s seconds ---" %
+                  (self._get_transformation_time))
 
         start_time = time()
         vehicle_bbox_list = self._world.get_level_bbs(
             carla.CityObjectLabel.Car)
-        # vehicle_bbox_list += self._world.get_level_bbs(
-        #    carla.CityObjectLabel.Rider)
-        # vehicle_bbox_list += self._world.get_level_bbs(
-        #    carla.CityObjectLabel.Truck)
+        vehicle_bbox_list += self._world.get_level_bbs(
+            carla.CityObjectLabel.Rider)
+        vehicle_bbox_list += self._world.get_level_bbs(
+            carla.CityObjectLabel.Truck)
         # vehicle_bbox_list += self._world.get_level_bbs(
         #    carla.CityObjectLabel.Bus)
         # vehicle_bbox_list += self._world.get_level_bbs(
@@ -173,12 +175,13 @@ class ObsManager(ObsManagerBase):
                 walker_bbox_list, is_within_distance)
         end_time = time()
         execution_time = end_time - start_time
-        print("\t\t\t\t--- Get actors time %s seconds ---" %
-              (execution_time))
-        self._get_actors_time = (
-            self._get_actors_time * self._counter + execution_time) / (self._counter + 1)
-        print("\t\t\t\t--- AVG get actors time %s seconds ---" %
-              (self._get_actors_time))
+        if self._show_stats:
+            print("\t\t--- Get actors time %s seconds ---" %
+                  (execution_time))
+            self._get_actors_time = (
+                self._get_actors_time * self._counter + execution_time) / (self._counter + 1)
+            print("\t\t--- AVG get actors time %s seconds ---" %
+                  (self._get_actors_time))
 
         start_time = time()
         tl_green = TrafficLightHandler.get_stopline_vtx(ev_loc, 0)
@@ -193,12 +196,13 @@ class ObsManager(ObsManagerBase):
 
         end_time = time()
         execution_time = end_time - start_time
-        print("\t\t\t\t--- Get traffic time %s seconds ---" %
-              (execution_time))
-        self._get_traffic_time = (
-            self._get_traffic_time * self._counter + execution_time) / (self._counter + 1)
-        print("\t\t\t\t--- AVG get traffic time %s seconds ---" %
-              (self._get_traffic_time))
+        if self._show_stats:
+            print("\t\t--- Get traffic time %s seconds ---" %
+                  (execution_time))
+            self._get_traffic_time = (
+                self._get_traffic_time * self._counter + execution_time) / (self._counter + 1)
+            print("\t\t--- AVG get traffic time %s seconds ---" %
+                  (self._get_traffic_time))
 
         start_time = time()
         # objects with history
@@ -207,12 +211,13 @@ class ObsManager(ObsManagerBase):
         end_time = time()
         execution_time = end_time - start_time
 
-        print("\t\t\t\t--- Get history masks time %s seconds ---" %
-              (execution_time))
-        self._get_history_masks_time = (
-            self._get_history_masks_time * self._counter + execution_time) / (self._counter + 1)
-        print("\t\t\t\t--- AVG get history masks time %s seconds ---" %
-              (self._get_history_masks_time))
+        if self._show_stats:
+            print("\t\t--- Get history masks time %s seconds ---" %
+                  (execution_time))
+            self._get_history_masks_time = (
+                self._get_history_masks_time * self._counter + execution_time) / (self._counter + 1)
+            print("\t\t--- AVG get history masks time %s seconds ---" %
+                  (self._get_history_masks_time))
 
         start_time = time()
         # road_mask, lane_mask
@@ -240,12 +245,13 @@ class ObsManager(ObsManagerBase):
         end_time = time()
         execution_time = end_time - start_time
 
-        print("\t\t\t\t--- Get masks time %s seconds ---" %
-              (execution_time))
-        self._get_masks_time = (
-            self._get_masks_time * self._counter + execution_time) / (self._counter + 1)
-        print("\t\t\t\t--- AVG get masks time %s seconds ---" %
-              (self._get_masks_time))
+        if self._show_stats:
+            print("\t\t--- Get masks time %s seconds ---" %
+                  (execution_time))
+            self._get_masks_time = (
+                self._get_masks_time * self._counter + execution_time) / (self._counter + 1)
+            print("\t\t--- AVG get masks time %s seconds ---" %
+                  (self._get_masks_time))
 
         start_time = time()
         # render
@@ -299,12 +305,13 @@ class ObsManager(ObsManagerBase):
         end_time = time()
         execution_time = end_time - start_time
 
-        print("\t\t\t\t--- Render time %s seconds ---" %
-              (execution_time))
-        self._render_time = (
-            self._render_time * self._counter + execution_time) / (self._counter + 1)
-        print("\t\t\t\t--- AVG render time %s seconds ---" %
-              (self._render_time))
+        if self._show_stats:
+            print("\t\t--- Render time %s seconds ---" %
+                  (execution_time))
+            self._render_time = (
+                self._render_time * self._counter + execution_time) / (self._counter + 1)
+            print("\t\t--- AVG render time %s seconds ---" %
+                  (self._render_time))
 
         obs_dict = {'rendered': image, 'masks': masks}
 

@@ -216,7 +216,8 @@ class FrustumPooling(nn.Module):
         #  [0, 0, 1]]
         # with f' = kf in pixel units. k being the factor in pixel/m, f the focal lens in m.
         # (m_x, m_y) is the center point in pixel.
-        print("x size in frustum_pooling: {}".format(x.size()))
+
+        # print("x size in frustum_pooling: {}".format(x.size()))
         self.initialize_frustum(x)
         rots = pose[..., :3, :3]
         trans = pose[..., :3, 3:]
