@@ -12,9 +12,9 @@ seed: 2021
 no_rendering: false
 kill_running: true
 resume: true
-log_video: true
+log_video: false
 show_debug: false
-show_stats: true
+show_stats: false
 
 # PAVE control parameters
 verbose: false
