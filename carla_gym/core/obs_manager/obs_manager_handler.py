@@ -32,10 +32,7 @@ class ObsManagerHandler(object):
 
     def get_observation_process(self, timestamp):
         obs_dict = {}
-        print("self._obs_managers.items(): {}".format(
-            self._obs_managers.items()))
-        print("len(self._obs_managers.items()): {}".format(
-            len(self._obs_managers.items())))
+
         ev_id = list(self._obs_managers.keys())[0]
         om_dict = list(self._obs_managers.values())[0]
         obs_dict[ev_id] = {}
@@ -53,10 +50,7 @@ class ObsManagerHandler(object):
 
     def get_observation(self, timestamp):
         obs_dict = {}
-        print("self._obs_managers.items(): {}".format(
-            self._obs_managers.items()))
-        print("len(self._obs_managers.items()): {}".format(
-            len(self._obs_managers.items())))
+
         ev_id = list(self._obs_managers.keys())[0]
         om_dict = list(self._obs_managers.values())[0]
         obs_dict[ev_id] = {}

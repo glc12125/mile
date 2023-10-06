@@ -6,6 +6,7 @@ from gym import spaces
 import cv2 as cv
 from collections import deque
 from pathlib import Path
+from time import time
 import h5py
 
 from carla_gym.core.obs_manager.obs_manager import ObsManagerBase
@@ -55,6 +56,14 @@ class ObsManager(ObsManagerBase):
         self._world = None
 
         self._map_dir = Path(__file__).resolve().parent / 'maps'
+
+        self._get_actors_time = 0.0
+        self._get_transformation_time = 0.0
+        self._get_traffic_time = 0.0
+        self._get_history_masks_time = 0.0
+        self._get_masks_time = 0.0
+        self._render_time = 0.0
+        self._counter = 0
 
         super(ObsManager, self).__init__()
 
@@ -112,11 +121,12 @@ class ObsManager(ObsManagerBase):
         return stops
 
     def get_observation(self):
+        start_time = time()
         ev_transform = self._parent_actor.vehicle.get_transform()
         ev_loc = ev_transform.location
         ev_rot = ev_transform.rotation
         ev_bbox = self._parent_actor.vehicle.bounding_box
-        snap_shot = self._world.get_snapshot()
+        # snap_shot = self._world.get_snapshot()
 
         def is_within_distance(w):
             c_distance = abs(ev_loc.x - w.location.x) < self._distance_threshold \
@@ -125,21 +135,30 @@ class ObsManager(ObsManagerBase):
             c_ev = abs(
                 ev_loc.x - w.location.x) < 1.0 and abs(ev_loc.y - w.location.y) < 1.0
             return c_distance and (not c_ev)
+        end_time = time()
+        execution_time = end_time - start_time
+        print("\t\t\t\t--- Get transformation time %s seconds ---" %
+              (execution_time))
+        self._get_transformation_time = (
+            self._get_transformation_time * self._counter + execution_time) / (self._counter + 1)
+        print("\t\t\t\t--- AVG get transformation time %s seconds ---" %
+              (self._get_transformation_time))
 
+        start_time = time()
         vehicle_bbox_list = self._world.get_level_bbs(
             carla.CityObjectLabel.Car)
-        vehicle_bbox_list += self._world.get_level_bbs(
-            carla.CityObjectLabel.Rider)
-        vehicle_bbox_list += self._world.get_level_bbs(
-            carla.CityObjectLabel.Truck)
-        vehicle_bbox_list += self._world.get_level_bbs(
-            carla.CityObjectLabel.Bus)
-        vehicle_bbox_list += self._world.get_level_bbs(
-            carla.CityObjectLabel.Train)
-        vehicle_bbox_list += self._world.get_level_bbs(
-            carla.CityObjectLabel.Motorcycle)
-        vehicle_bbox_list += self._world.get_level_bbs(
-            carla.CityObjectLabel.Bicycle)
+        # vehicle_bbox_list += self._world.get_level_bbs(
+        #    carla.CityObjectLabel.Rider)
+        # vehicle_bbox_list += self._world.get_level_bbs(
+        #    carla.CityObjectLabel.Truck)
+        # vehicle_bbox_list += self._world.get_level_bbs(
+        #    carla.CityObjectLabel.Bus)
+        # vehicle_bbox_list += self._world.get_level_bbs(
+        #    carla.CityObjectLabel.Train)
+        # vehicle_bbox_list += self._world.get_level_bbs(
+        #    carla.CityObjectLabel.Motorcycle)
+        # vehicle_bbox_list += self._world.get_level_bbs(
+        #    carla.CityObjectLabel.Bicycle)
         walker_bbox_list = self._world.get_level_bbs(
             carla.CityObjectLabel.Pedestrians)
         if self._scale_bbox:
@@ -152,7 +171,16 @@ class ObsManager(ObsManagerBase):
                 vehicle_bbox_list, is_within_distance)
             walkers = self._get_surrounding_actors(
                 walker_bbox_list, is_within_distance)
+        end_time = time()
+        execution_time = end_time - start_time
+        print("\t\t\t\t--- Get actors time %s seconds ---" %
+              (execution_time))
+        self._get_actors_time = (
+            self._get_actors_time * self._counter + execution_time) / (self._counter + 1)
+        print("\t\t\t\t--- AVG get actors time %s seconds ---" %
+              (self._get_actors_time))
 
+        start_time = time()
         tl_green = TrafficLightHandler.get_stopline_vtx(ev_loc, 0)
         tl_yellow = TrafficLightHandler.get_stopline_vtx(ev_loc, 1)
         tl_red = TrafficLightHandler.get_stopline_vtx(ev_loc, 2)
@@ -163,10 +191,30 @@ class ObsManager(ObsManagerBase):
 
         M_warp = self._get_warp_transform(ev_loc, ev_rot)
 
+        end_time = time()
+        execution_time = end_time - start_time
+        print("\t\t\t\t--- Get traffic time %s seconds ---" %
+              (execution_time))
+        self._get_traffic_time = (
+            self._get_traffic_time * self._counter + execution_time) / (self._counter + 1)
+        print("\t\t\t\t--- AVG get traffic time %s seconds ---" %
+              (self._get_traffic_time))
+
+        start_time = time()
         # objects with history
         vehicle_masks, walker_masks, tl_green_masks, tl_yellow_masks, tl_red_masks, stop_masks \
             = self._get_history_masks(M_warp)
+        end_time = time()
+        execution_time = end_time - start_time
 
+        print("\t\t\t\t--- Get history masks time %s seconds ---" %
+              (execution_time))
+        self._get_history_masks_time = (
+            self._get_history_masks_time * self._counter + execution_time) / (self._counter + 1)
+        print("\t\t\t\t--- AVG get history masks time %s seconds ---" %
+              (self._get_history_masks_time))
+
+        start_time = time()
         # road_mask, lane_mask
         road_mask = cv.warpAffine(
             self._road, M_warp, (self._width, self._width)).astype(np.bool)
@@ -189,7 +237,17 @@ class ObsManager(ObsManagerBase):
             [(ev_transform, ev_bbox.location, ev_bbox.extent)], M_warp)
         ev_mask_col = self._get_mask_from_actor_list([(ev_transform, ev_bbox.location,
                                                        ev_bbox.extent*self._scale_mask_col)], M_warp)
+        end_time = time()
+        execution_time = end_time - start_time
 
+        print("\t\t\t\t--- Get masks time %s seconds ---" %
+              (execution_time))
+        self._get_masks_time = (
+            self._get_masks_time * self._counter + execution_time) / (self._counter + 1)
+        print("\t\t\t\t--- AVG get masks time %s seconds ---" %
+              (self._get_masks_time))
+
+        start_time = time()
         # render
         image = np.zeros([self._width, self._width, 3], dtype=np.uint8)
         image[road_mask] = COLOR_ALUMINIUM_5
@@ -238,10 +296,22 @@ class ObsManager(ObsManagerBase):
                          *c_walker_history, *c_tl_history), axis=2)
         masks = np.transpose(masks, [2, 0, 1])
 
+        end_time = time()
+        execution_time = end_time - start_time
+
+        print("\t\t\t\t--- Render time %s seconds ---" %
+              (execution_time))
+        self._render_time = (
+            self._render_time * self._counter + execution_time) / (self._counter + 1)
+        print("\t\t\t\t--- AVG render time %s seconds ---" %
+              (self._render_time))
+
         obs_dict = {'rendered': image, 'masks': masks}
 
         self._parent_actor.collision_px = np.any(
             ev_mask_col & walker_masks[-1])
+
+        self._counter += 1
 
         return obs_dict
 

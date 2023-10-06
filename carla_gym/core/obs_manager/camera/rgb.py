@@ -119,8 +119,12 @@ class ObsManager(ObsManagerBase):
         # np_img = copy.deepcopy(np_img)
 
         np_img = np.reshape(np_img, (carla_image.height, carla_image.width, 4))
-        np_img = np_img[:, :, :3]
-        np_img = np_img[:, :, ::-1]
+        # Step 1: remove the alpha channel
+        # np_img = np_img[:, :, :3]
+        # Step 2: convert RGB to BGR
+        # np_img = np_img[:, :, ::-1]
+        #
+        np_img = np_img[:, :, 2::-1]
 
         # np_img = np.moveaxis(np_img, -1, 0)
         # image = cv2.resize(image, (self._res_x, self._res_y), interpolation=cv2.INTER_AREA)

@@ -22,6 +22,7 @@ import cv2
 import matplotlib.pyplot as plt
 
 import math
+import threading
 from queue import Queue
 from queue import Empty
 
@@ -968,6 +969,20 @@ class CameraManager(object):
 # end of pygame related
 
 
+def log_video_task(videos, info, actor_id, render_func):
+    debug_image = render_func(
+        info[actor_id]['reward_debug'], info[actor_id]['terminal_debug'])
+    videos.append(debug_image)
+
+
+def run_log_video_thread(videos, info, actor_id, render_func):
+    t = threading.Thread(target=log_video_task, args=(
+        videos, info, actor_id, render_func))
+    print(f"Created Thread: {t}")
+    t.start()
+    return t
+
+
 def run_single(run_name, env, agents_dict, agents_log_dir, log_video, cfg, max_step=None, show_debug=False):
     list_render = []
     ep_stat_dict = {}
@@ -1008,6 +1023,7 @@ def run_single(run_name, env, agents_dict, agents_log_dir, log_video, cfg, max_s
         end_to_end_start_time = time()
         start_time = end_to_end_start_time
         control_dict = {}
+        log_video_thread = None
         for actor_id, agent in agents_dict.items():
             control_dict[actor_id], gps_vector, gps_vector_next = agent.run_step(
                 obs[actor_id], timestamp)
@@ -1039,9 +1055,11 @@ def run_single(run_name, env, agents_dict, agents_log_dir, log_video, cfg, max_s
         render_imgs = []
         for actor_id, agent in agents_dict.items():
             if log_video:
-                debug_image = agent.render(
-                    info[actor_id]['reward_debug'], info[actor_id]['terminal_debug'])
-                render_imgs.append(debug_image)
+                # debug_image = agent.render(
+                #    info[actor_id]['reward_debug'], info[actor_id]['terminal_debug'])
+                # render_imgs.append(debug_image)
+                log_video_thread = run_log_video_thread(
+                    render_imgs, info, actor_id, agent.render)
             if show_debug:
                 debug_image = agent.render(
                     info[actor_id]['reward_debug'], info[actor_id]['terminal_debug'])
@@ -1071,6 +1089,7 @@ def run_single(run_name, env, agents_dict, agents_log_dir, log_video, cfg, max_s
         if len(list_render) > 15000:
             del list_render[0]
         if log_video:
+            log_video_thread.join()
             list_render.append(tile_images(render_imgs))
 
         timestamp = env.timestamp
