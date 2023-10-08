@@ -5,8 +5,14 @@ from collections import deque
 
 import torch
 import time
+import os
+import sys
+import importlib
+import pathlib
+
 from omegaconf import OmegaConf
 from torchmetrics import JaccardIndex
+import numpy as np
 
 from carla_gym.utils.config_utils import load_entry_point
 from mile.constants import CARLA_FPS, DISPLAY_SEGMENTATION
@@ -19,18 +25,19 @@ class MileAgent:
     def __init__(self, path_to_conf_file='config_agent.yaml'):
         self._logger = logging.getLogger(__name__)
         self._render_dict = None
-        self.setup(path_to_conf_file)
-        self.inference_avg_time = 0.0
-        self.preprocess_avg_time = 0.0
-        self.postprocess_avg_time = 0.0
-        self.metrics_avg_time = 0.0
-        self.render_avg_time = 0.0
-        self.inference_counter = 0
+        self._inference_avg_time = 0.0
+        self._preprocess_avg_time = 0.0
+        self._postprocess_avg_time = 0.0
+        self._metrics_avg_time = 0.0
+        self._render_avg_time = 0.0
+        self._inference_counter = 0
         self._show_stats = False
+        self._callbacks = []
+        self.setup(path_to_conf_file)
 
     def setup(self, path_to_conf_file):
         cfg = OmegaConf.load(path_to_conf_file)
-
+        print("cfg for agent: {}".format(cfg))
         # load checkpoint from wandb
         self._ckpt = None
 
@@ -42,7 +49,7 @@ class MileAgent:
         wrapper_class = load_entry_point(cfg['env_wrapper']['entry_point'])
 
         # prepare policy
-        self.input_buffer_size = 1
+        self._input_buffer_size = 1
         if cfg['ckpt'] is not None:
             trainer = WorldModelTrainer.load_from_checkpoint(
                 cfg['ckpt'], pretrained_path=cfg['ckpt'])
@@ -53,45 +60,70 @@ class MileAgent:
             receptive_field = trainer.model.receptive_field
             n_image_per_stride = int(game_frequency * model_stride_sec)
 
-            self.input_buffer_size = (
+            self._input_buffer_size = (
                 receptive_field - 1) * n_image_per_stride + 1
-            self.sequence_indices = range(
-                0, self.input_buffer_size, n_image_per_stride)
+            self._sequence_indices = range(
+                0, self._input_buffer_size, n_image_per_stride)
 
         self._env_wrapper = wrapper_class(cfg=self._policy.cfg)
 
         self._policy = self._policy.eval()
 
-        self.policy_input_queue = {
-            'image': deque(maxlen=self.input_buffer_size),
-            'route_map': deque(maxlen=self.input_buffer_size),
-            'route_command': deque(maxlen=self.input_buffer_size),
-            'gps_vector': deque(maxlen=self.input_buffer_size),
-            'route_command_next': deque(maxlen=self.input_buffer_size),
-            'gps_vector_next': deque(maxlen=self.input_buffer_size),
-            'speed': deque(maxlen=self.input_buffer_size),
-            'intrinsics': deque(maxlen=self.input_buffer_size),
-            'extrinsics': deque(maxlen=self.input_buffer_size),
-            'birdview': deque(maxlen=self.input_buffer_size),
-            'birdview_label': deque(maxlen=self.input_buffer_size),
+        self._policy_input_queue = {
+            'image': deque(maxlen=self._input_buffer_size),
+            'route_map': deque(maxlen=self._input_buffer_size),
+            'route_command': deque(maxlen=self._input_buffer_size),
+            'gps_vector': deque(maxlen=self._input_buffer_size),
+            'route_command_next': deque(maxlen=self._input_buffer_size),
+            'gps_vector_next': deque(maxlen=self._input_buffer_size),
+            'speed': deque(maxlen=self._input_buffer_size),
+            'intrinsics': deque(maxlen=self._input_buffer_size),
+            'extrinsics': deque(maxlen=self._input_buffer_size),
+            'birdview': deque(maxlen=self._input_buffer_size),
+            'birdview_label': deque(maxlen=self._input_buffer_size),
         }
-        self.action_queue = deque(maxlen=self.input_buffer_size)
-        self.cfg = cfg
+        self._action_queue = deque(maxlen=self._input_buffer_size)
+        self._cfg = cfg
 
         # Custom metrics
         if self._policy.cfg.SEMANTIC_SEG.ENABLED and DISPLAY_SEGMENTATION:
-            self.iou = JaccardIndex(
+            self._iou = JaccardIndex(
                 task='multiclass', num_classes=self._policy.cfg.SEMANTIC_SEG.N_CHANNELS).cuda()
-            self.real_time_iou = JaccardIndex(
+            self._real_time_iou = JaccardIndex(
                 task='multiclass', num_classes=self._policy.cfg.SEMANTIC_SEG.N_CHANNELS, compute_on_step=True,
             ).cuda()
 
-        if self.cfg['online_deployment']:
+        if self._cfg['online_deployment']:
             print('Online deployment')
         else:
             print('Recomputing')
 
-        self.warm_start = 25
+        self._warm_start = 25
+        self._initialize_callbacks()
+
+    def _initialize_callbacks(self):
+        for callback in self._cfg['callbacks']:
+            # callback_paths.append(Path(cfg['callback_path'], callback))
+            # Load Publisher
+            current_working_dir = pathlib.Path().resolve()
+            print("current_working_dir: {}".format(current_working_dir))
+            script_path = pathlib.Path(__file__).parent.resolve()
+            print("script_path: {}".format(script_path))
+            callback_file_path = str(script_path) + "/../../../" + \
+                self._cfg['callback_path'] + '/' + callback
+            module_name = os.path.basename(callback_file_path).split('.')[0]
+            print("callback_file_path: {}".format(callback_file_path))
+            sys.path.insert(0, os.path.dirname(callback_file_path))
+            print("os.path.dirname(callback_file_path): {}".format(
+                os.path.dirname(callback_file_path)))
+            module_callback = importlib.import_module(module_name)
+            callback_class_name = module_callback.__name__.title().replace('_', '')
+            logging.debug("Initialising callback class: {}".format(
+                callback_class_name))
+            callback_instance = getattr(module_callback, callback_class_name)()
+            logging.debug("Finished initialising callback class: {}".format(
+                callback_class_name))
+            self._callbacks.append(callback_instance)
 
     def show_stats(self, show_stats=False):
         self._show_stats = show_stats
@@ -102,32 +134,32 @@ class MileAgent:
             input_data)
         end_time = time.time()
         execution_time = end_time - start_time
-        if self.inference_counter >= self.warm_start and self._show_stats:
+        if self._inference_counter >= self._warm_start and self._show_stats:
             print("\t--- Preprocess time %s seconds ---" % (execution_time))
-            self.preprocess_avg_time = (
-                self.preprocess_avg_time * self.inference_counter + execution_time) / (self.inference_counter + 1)
+            self._preprocess_avg_time = (
+                self._preprocess_avg_time * self._inference_counter + execution_time) / (self._inference_counter + 1)
             print("\t--- AVG Preprocess time %s seconds ---" %
-                  (self.preprocess_avg_time))
+                  (self._preprocess_avg_time))
         # Forward pass
         with torch.no_grad():
             is_dreaming = False
             start_time = time.time()
-            if self.cfg['online_deployment']:
+            if self._cfg['online_deployment']:
                 output = self._policy.deployment_forward(
                     policy_input, is_dreaming=is_dreaming)
             else:
                 output = self._policy(policy_input, deployment=True)
             end_time = time.time()
             execution_time = end_time - start_time
-            if self.inference_counter >= self.warm_start and self._show_stats:
+            if self._inference_counter >= self._warm_start and self._show_stats:
                 print("\t--- Inferencing time %s seconds ---" %
                       (execution_time))
-                self.inference_avg_time = (
-                    self.inference_avg_time * self.inference_counter + execution_time) / (self.inference_counter + 1)
+                self._inference_avg_time = (
+                    self._inference_avg_time * self._inference_counter + execution_time) / (self._inference_counter + 1)
                 print("\t--- AVG Inferencing time %s seconds ---" %
-                      (self.inference_avg_time))
+                      (self._inference_avg_time))
             elif self._show_stats:
-                print("\t--- Skipping frame %s" % (self.inference_counter))
+                print("\t--- Skipping frame %s" % (self._inference_counter))
 
         start_time = time.time()
         actions = torch.cat(
@@ -135,27 +167,27 @@ class MileAgent:
         control = self._env_wrapper.process_act(actions)
 
         # Populate action queue
-        self.action_queue.append(torch.from_numpy(actions).cuda())
+        self._action_queue.append(torch.from_numpy(actions).cuda())
         end_time = time.time()
         execution_time = end_time - start_time
-        if self.inference_counter >= self.warm_start and self._show_stats:
+        if self._inference_counter >= self._warm_start and self._show_stats:
             print("\t--- Postprocess time %s seconds ---" % (execution_time))
-            self.postprocess_avg_time = (
-                self.postprocess_avg_time * self.inference_counter + execution_time) / (self.inference_counter + 1)
+            self._postprocess_avg_time = (
+                self._postprocess_avg_time * self._inference_counter + execution_time) / (self._inference_counter + 1)
             print("\t--- AVG Postprocess time %s seconds ---" %
-                  (self.postprocess_avg_time))
+                  (self._postprocess_avg_time))
         start_time = time.time()
         # Metrics
         # metrics = self.forward_metrics(policy_input, output)
         end_time = time.time()
         execution_time = end_time - start_time
-        if self.inference_counter >= self.warm_start and self._show_stats:
+        if self._inference_counter >= self._warm_start and self._show_stats:
             print("\t--- Forward metrics time %s seconds ---" %
                   (execution_time))
-            self.metrics_avg_time = (
-                self.metrics_avg_time * self.inference_counter + execution_time) / (self.inference_counter + 1)
+            self._metrics_avg_time = (
+                self._metrics_avg_time * self._inference_counter + execution_time) / (self._inference_counter + 1)
             print("\t--- AVG Forward metrics time %s seconds ---" %
-                  (self.metrics_avg_time))
+                  (self._metrics_avg_time))
 
         start_time = time.time()
         # self.prepare_rendering(policy_input, output,
@@ -164,19 +196,19 @@ class MileAgent:
                                None, timestamp, is_dreaming)
         end_time = time.time()
         execution_time = end_time - start_time
-        if self.inference_counter >= self.warm_start and self._show_stats:
+        if self._inference_counter >= self._warm_start and self._show_stats:
             print("\t--- Prepare rendering time %s seconds ---" %
                   (execution_time))
-            self.render_avg_time = (
-                self.render_avg_time * self.inference_counter + execution_time) / (self.inference_counter + 1)
+            self._render_avg_time = (
+                self._render_avg_time * self._inference_counter + execution_time) / (self._inference_counter + 1)
             print("\t--- AVG Prepare rendering time %s seconds ---" %
-                  (self.render_avg_time))
-        self.inference_counter += 1
+                  (self._render_avg_time))
+        self._inference_counter += 1
         return control, gps_vector, gps_vector_next
 
     def preprocess_data(self, input_data):
         # Fill the input queue with new elements
-        image = input_data['central_rgb']['data'].transpose((2, 0, 1))
+        self.image = input_data['central_rgb']['data'].transpose((2, 0, 1))
 
         route_command, gps_vector = preprocess_measurements(
             input_data['gnss']['command'].squeeze(0),
@@ -209,45 +241,46 @@ class MileAgent:
             self._policy.cfg)
 
         # Using gpu inputs
-        self.policy_input_queue['image'].append(
-            torch.from_numpy(image.copy()).cuda())
-        self.policy_input_queue['route_command'].append(
+        self._policy_input_queue['image'].append(
+            torch.from_numpy(self.image.copy()).cuda())
+        self._policy_input_queue['route_command'].append(
             torch.from_numpy(route_command).cuda())
-        self.policy_input_queue['gps_vector'].append(
+        self._policy_input_queue['gps_vector'].append(
             torch.from_numpy(gps_vector).cuda())
-        self.policy_input_queue['route_command_next'].append(
+        self._policy_input_queue['route_command_next'].append(
             torch.from_numpy(route_command_next).cuda())
-        self.policy_input_queue['gps_vector_next'].append(
+        self._policy_input_queue['gps_vector_next'].append(
             torch.from_numpy(gps_vector_next).cuda())
-        self.policy_input_queue['route_map'].append(route_map)
-        self.policy_input_queue['speed'].append(torch.from_numpy(speed).cuda())
-        self.policy_input_queue['intrinsics'].append(
+        self._policy_input_queue['route_map'].append(route_map)
+        self._policy_input_queue['speed'].append(
+            torch.from_numpy(speed).cuda())
+        self._policy_input_queue['intrinsics'].append(
             torch.from_numpy(intrinsics).cuda())
-        self.policy_input_queue['extrinsics'].append(
+        self._policy_input_queue['extrinsics'].append(
             torch.from_numpy(extrinsics).cuda())
 
-        self.policy_input_queue['birdview'].append(birdview)
-        self.policy_input_queue['birdview_label'].append(birdview_label)
+        self._policy_input_queue['birdview'].append(birdview)
+        self._policy_input_queue['birdview_label'].append(birdview_label)
 
-        for key in self.policy_input_queue.keys():
-            while len(self.policy_input_queue[key]) < self.input_buffer_size:
-                self.policy_input_queue[key].append(
-                    self.policy_input_queue[key][-1])
+        for key in self._policy_input_queue.keys():
+            while len(self._policy_input_queue[key]) < self._input_buffer_size:
+                self._policy_input_queue[key].append(
+                    self._policy_input_queue[key][-1])
 
-        if len(self.action_queue) == 0:
-            self.action_queue.append(torch.zeros(
+        if len(self._action_queue) == 0:
+            self._action_queue.append(torch.zeros(
                 2, device=torch.device('cuda')))
-        while len(self.action_queue) < self.input_buffer_size:
-            self.action_queue.append(self.action_queue[-1])
+        while len(self._action_queue) < self._input_buffer_size:
+            self._action_queue.append(self._action_queue[-1])
 
         # Prepare model input
         policy_input = {}
-        for key in self.policy_input_queue.keys():
+        for key in self._policy_input_queue.keys():
             policy_input[key] = torch.stack(
-                list(self.policy_input_queue[key]), axis=0).unsqueeze(0).clone()
+                list(self._policy_input_queue[key]), axis=0).unsqueeze(0).clone()
 
         action_input = torch.stack(
-            list(self.action_queue), axis=0).unsqueeze(0).float()
+            list(self._action_queue), axis=0).unsqueeze(0).float()
 
         # We do not have access to the last action, as it is the one we're going to compute.
         action_input = torch.cat(
@@ -256,7 +289,7 @@ class MileAgent:
 
         # Select right elements in the sequence
         for k, v in policy_input.items():
-            policy_input[k] = v[:, self.sequence_indices]
+            policy_input[k] = v[:, self._sequence_indices]
 
         return policy_input, gps_vector, gps_vector_next
 
@@ -286,10 +319,10 @@ class MileAgent:
         fh.setLevel(logging.DEBUG)
         self._logger.addHandler(fh)
 
-        for v in self.policy_input_queue.values():
+        for v in self._policy_input_queue.values():
             v.clear()
 
-        self.action_queue.clear()
+        self._action_queue.clear()
 
     def render(self, reward_debug, terminal_debug):
         '''
@@ -307,9 +340,9 @@ class MileAgent:
                 bev_prediction = output['bev_segmentation_1'].detach()
                 bev_prediction = torch.argmax(bev_prediction, dim=2)[:, -1]
                 bev_label = policy_input['birdview_label'][:, -1, 0]
-                self.iou(bev_prediction.view(-1), bev_label.view(-1))
+                self._iou(bev_prediction.view(-1), bev_label.view(-1))
 
-                real_time_metrics['intersection-over-union'] = self.real_time_iou(
+                real_time_metrics['intersection-over-union'] = self._real_time_iou(
                     bev_prediction, bev_label).mean().item()
 
         return real_time_metrics
@@ -317,11 +350,39 @@ class MileAgent:
     def compute_metrics(self):
         metrics = {}
         if self._policy.cfg.SEMANTIC_SEG.ENABLED and DISPLAY_SEGMENTATION:
-            scores = self.iou.compute()
+            scores = self._iou.compute()
             metrics['intersection-over-union'] = scores.item()
-            self.iou.reset()
+            self._iou.reset()
         return metrics
 
     @property
     def obs_configs(self):
         return self._obs_configs
+
+    def postprocess(self, vehicle_state):
+        if len(self._callbacks) == 0:
+            pass
+
+        # The channel order for the model is (c, h, w)
+        # while the visualisation and carla generates (h, w, c)
+        if self.image.shape[2] > 4:
+            rendered_image = self.image.transpose((1, 2, 0))
+
+        if rendered_image.shape[2] == 3:
+            # alpha_channel = np.full((240, 480, 1), 100, 'uint8')
+            alpha_channel = np.full((600, 960, 1), 100, 'uint8')
+            to_send = np.dstack((rendered_image, alpha_channel))
+        elif rendered_image.shape[2] == 4:
+            to_send = rendered_image
+        else:
+            logging.error("unexpected size of image: {}".format(
+                rendered_image.shape))
+            raise
+
+        structured_data = {
+            'image': to_send.tobytes(),
+            'vehicle_state': vehicle_state
+        }
+
+        for callback in self._callbacks:
+            callback.publish(structured_data)

@@ -1,0 +1,33 @@
+CARLA_VERSION=0.9.14
+DOCKER_CONTAINER_NAME=mile
+
+
+# Transfer the CARLA Python client environment to the container
+# This includes the demo examples that come with the CARLA package.
+PythonAPI:
+	# Install CARLA client modified source files ...
+	docker cp src/carla/ ${DOCKER_CONTAINER_NAME}:/root
+	# Install CARLA client bundle ...
+	tar xf src/carla-${CARLA_VERSION}-PythonAPI.tar.xz
+	docker cp PythonAPI ${DOCKER_CONTAINER_NAME}:/root
+	docker cp PythonAPI/carla/agents ${DOCKER_CONTAINER_NAME}:/root/carla
+	docker exec -it -w /root/carla ${DOCKER_CONTAINER_NAME} \
+		python3 ./setup.py clean --all build install
+
+#-----------------------------------------------------
+build: PythonAPI
+
+#-----------------------------------------------------
+sim:
+	#
+	# With no random traffic ...
+	docker exec -w /root/carla -e DISPLAY=$(DISPLAY) $(DOCKER_CONTAINER_NAME) \
+		python3 pave_automatic_control.$(CARLA_VERSION).py \
+			--port $(CARLA_UE4_PORT) --host $(CARLA_UE4_SERVER) \
+			--comodel $(XL_TLM_SERVER_IP) --domain $(SOCKET_DOMAIN) \
+			--behavior normal --agent Basic --show-way True --seed=1024 \
+			--dynamic-weather \
+				2>&1 | tee simCarla.log
+
+clean: 
+	rm -rf PythonAPI

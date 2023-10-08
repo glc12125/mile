@@ -18,14 +18,18 @@ show_stats: false
 
 # PAVE control parameters
 verbose: false
-comodel: '127.0.0.1'
-domain: 'AF_UNIX'
 res: '1280x720'
 tm-port: 8000
 filter: 'vehicle.*'
 gamma: 2.2
 use_ekf: false
 show_way: false
+## Callbacks
+callback_path: utils/publishers
+callbacks: [] # pave_publisher.py
+## Relevent when the publisher is a pave publisher
+pave_comodel: '127.0.0.1'
+pave_domain: 'AF_UNIX'
 
 # End of PAVE control parameters
 

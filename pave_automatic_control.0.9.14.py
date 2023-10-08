@@ -969,6 +969,40 @@ class CameraManager(object):
 # end of pygame related
 
 
+def get_vehicle_state(ego_vehicle):
+    if ego_vehicle is None:
+        vehicle_state = None
+    else:
+        light_state = ego_vehicle.get_light_state()
+        left_blinker = bool(light_state & carla.VehicleLightState.LeftBlinker)
+        right_blinker = bool(
+            light_state & carla.VehicleLightState.RightBlinker)
+        low_beam = bool(light_state & carla.VehicleLightState.LowBeam)
+        high_beam = bool(light_state & carla.VehicleLightState.HighBeam)
+        fog_light = bool(light_state & carla.VehicleLightState.Fog)
+
+        vel = ego_vehicle.get_velocity()
+        total_velocity = math.sqrt(vel.x**2 + vel.y**2 + vel.z**2)
+
+        control = ego_vehicle.get_control()
+        hand_brake = control.hand_brake
+        reverse = control.reverse
+        gear = control.gear
+
+        vehicle_state = {
+            'left_blinker': left_blinker,
+            'right_blinker': right_blinker,
+            'low_beam': low_beam,
+            'high_beam': high_beam,
+            'fog_light': fog_light,
+            'hand_brake': hand_brake,
+            'reverse': reverse,
+            'gear': gear,
+            'velocity': total_velocity
+        }
+    return vehicle_state
+
+
 def log_video_task(videos, info, actor_id, render_func):
     debug_image = render_func(
         info[actor_id]['reward_debug'], info[actor_id]['terminal_debug'])
@@ -1045,6 +1079,7 @@ def run_single(run_name, env, agents_dict, agents_log_dir, log_video, cfg, max_s
                   (model_inference_avg_time))
 
         start_time = time()
+        vehicle_state = get_vehicle_state(world.player)
         world.tick(clock, gps_vector, gps_vector_next, control_dict[actor_id])
         world.render(display)
         pygame.display.flip()
@@ -1084,6 +1119,8 @@ def run_single(run_name, env, agents_dict, agents_log_dir, log_video, cfg, max_s
                 # custom_metrics = agent.compute_metrics()
                 # ep_stat_dict[actor_id] = {
                 #    **ep_stat_dict[actor_id], **custom_metrics}
+            # call callbacks
+            agent.postprocess(vehicle_state)
         end_time = time()
         execution_time = end_time - start_time
         if counter >= warm_start and show_stats:
@@ -1185,6 +1222,12 @@ def game_loop(cfg):
         agent_names.append(ev_cfg.agent)
         pprint("ev_id: {}, ev_cfg: {}".format(ev_id, ev_cfg))
         cfg_agent = cfg.agent[ev_cfg.agent]
+        # print("type(cfg_agent): {}".format(type(cfg_agent)))
+        # print("cfg_agent: {}".format(cfg_agent))
+        with open_dict(cfg_agent):
+            cfg_agent["callbacks"] = cfg.callbacks
+            cfg_agent["callback_path"] = cfg.callback_path
+        print("cfg_agent: {}".format(cfg_agent))
         OmegaConf.save(config=cfg_agent, f='config_agent.yaml')
         AgentClass = config_utils.load_entry_point(cfg_agent.entry_point)
         agents_dict[ev_id] = AgentClass('config_agent.yaml')

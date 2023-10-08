@@ -1,0 +1,60 @@
+all: compile build sim check clean
+
+SRCS = tbMainOsci.cxx SyscVpiTimeStub.cxx
+
+tbMainOsci.cxx: src/server/MainOsci.cxx src/server/FabricServer.cxx
+	cat $^ > $@
+
+#----------------------------------------------------
+SyscVpiTimeStub.cxx: ${XL_VIP_HOME}/lib/SyscVpiTimeStub.cxx
+	cp -p $^ $@
+
+CFLAGS = -Wno-unused-function
+
+XL_VIP = ${XL_VIP_HOME}/lib
+XL_VIP_OBJ = ${XL_VIP}/${XL_BUILD_PLATFORM}/osci
+UVMC_LIB_OBJ = ${UVMC_HOME}/lib/osci/${UVMC_BUILD_PLATFORM}
+
+$(info    XL_VIP: ${XL_VIP})
+$(info    XL_VIP_OBJ: ${XL_VIP_OBJ})
+$(info    UVMC_LIB_OBJ: ${UVMC_LIB_OBJ})
+
+CDEFINES = -DSC_INCLUDE_DYNAMIC_PROCESSES
+
+include common.mk
+
+XL_VIP_LIBS += ${XL_VIP_OBJ}/XlTlmEthSoftSw.o 
+
+INCL += -I${XL_VIP}/lib_remote -I${SYSTEMC}/include -I${SYSTEMC_TLM_HOME} -I${SYSTEMC_TLM_HOME}/tlm_utils
+
+$(info    SYSTEMC: ${SYSTEMC})
+$(info    SYSTEMC_TLM_HOME: ${SYSTEMC_TLM_HOME})
+
+
+TB = FabricServer
+
+LDFLAGS += -L${SYSTEMC}/${SYSC_LIB} -lsystemc -lscv -lrt -lpthread -ldl
+
+$(info    SYSC_LIB: ${SYSC_LIB})
+
+compile:
+
+build: ${TB} | ${DEPS}
+
+${TB}: ${OBJS} ${XL_VIP_LIBS} ${UVMC_LIB_SO} ${XL_VIP_PREBUILT_OBJS}
+	${CXX} -o $@ $^ ${LDFLAGS}
+
+#-----------------------------------------------------------------------------
+sim: ${TESTS}
+
+demoCarlaRosGateway:
+	LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:${SYSTEMC}/${SYSC_LIB} ./FabricServer --domain=${SOCKET_DOMAIN} 2>&1 | tee check.$@.transcript
+
+#-----------------------------------------------------------------------------
+CHECK_TESTS=${TESTS:%=check.%}
+
+check: ${CHECK_TESTS}
+
+${CHECK_TESTS}:
+	cat $@.transcript | perl gold/check.server.pl > $@.server.${CONTROL_ALGORITHM}.log.cmp
+	cmp $@.server.${CONTROL_ALGORITHM}.log.cmp gold/$@.server.${CONTROL_ALGORITHM}.log.cmp
