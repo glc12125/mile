@@ -2,8 +2,8 @@
 if [ "$#" -lt 1 ]; then
   #echo "usage: ./run.sh IMAGE_NAME"
   #return 1
-  echo "Using default: bdi/melodic_amd64:latest"
-  IMAGE_NAME=bdi/melodic_amd64:latest
+  echo "Using default: glc12125/pytorch:1.12.1-cuda11.3-cudnn8-devel-mile-carla14"
+  IMAGE_NAME=glc12125/pytorch:1.12.1-cuda11.3-cudnn8-devel-mile-carla14
 else
   IMAGE_NAME=$1
 fi
