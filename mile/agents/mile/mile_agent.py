@@ -18,7 +18,9 @@ from carla_gym.utils.config_utils import load_entry_point
 from mile.constants import CARLA_FPS, DISPLAY_SEGMENTATION
 from mile.data.dataset import calculate_geometry_from_config
 from mile.data.dataset_utils import preprocess_birdview_and_routemap, preprocess_measurements, calculate_birdview_labels
-from mile.trainer import WorldModelTrainer
+from mile.config import get_cfg
+from mile.models.mile import Mile
+from mile.models.preprocess import PreProcess
 
 
 class MileAgent:
@@ -51,13 +53,21 @@ class MileAgent:
         # prepare policy
         self._input_buffer_size = 1
         if cfg['ckpt'] is not None:
-            trainer = WorldModelTrainer.load_from_checkpoint(
-                cfg['ckpt'], pretrained_path=cfg['ckpt'])
-            print(f'Loading world model weights from {cfg["ckpt"]}')
-            self._policy = trainer.to('cuda')
+            # trainer = WorldModelTrainer.load_from_checkpoint(
+            #    cfg['ckpt'], pretrained_path=cfg['ckpt'])
+            # print(f'Loading world model weights from {cfg["ckpt"]}')
+            # self._policy = trainer.to('cuda')
+            self._model_cfg = get_cfg()
+            self._model_cfg.RECEPTIVE_FIELD = 6
+            self._model_cfg.FUTURE_HORIZON = 6
+            model = Mile(self._model_cfg)
+            model.load_state_dict(torch.load(cfg['ckpt'], map_location='cpu'))
+            self._policy = model.to('cuda')
+            self._preprocess = PreProcess(self._model_cfg)
+            self._preprocess = self._preprocess.to('cuda')
             game_frequency = CARLA_FPS
-            model_stride_sec = self._policy.cfg.DATASET.STRIDE_SEC
-            receptive_field = trainer.model.receptive_field
+            model_stride_sec = self._model_cfg.DATASET.STRIDE_SEC
+            receptive_field = model.receptive_field
             n_image_per_stride = int(game_frequency * model_stride_sec)
 
             self._input_buffer_size = (
@@ -65,8 +75,9 @@ class MileAgent:
             self._sequence_indices = range(
                 0, self._input_buffer_size, n_image_per_stride)
 
-        self._env_wrapper = wrapper_class(cfg=self._policy.cfg)
+        self._env_wrapper = wrapper_class(cfg=self._model_cfg)
 
+        self._preprocess = self._preprocess.eval()
         self._policy = self._policy.eval()
 
         self._policy_input_queue = {
@@ -86,11 +97,11 @@ class MileAgent:
         self._cfg = cfg
 
         # Custom metrics
-        if self._policy.cfg.SEMANTIC_SEG.ENABLED and DISPLAY_SEGMENTATION:
+        if self._model_cfg.SEMANTIC_SEG.ENABLED and DISPLAY_SEGMENTATION:
             self._iou = JaccardIndex(
-                task='multiclass', num_classes=self._policy.cfg.SEMANTIC_SEG.N_CHANNELS).cuda()
+                task='multiclass', num_classes=self._model_cfg.SEMANTIC_SEG.N_CHANNELS).cuda()
             self._real_time_iou = JaccardIndex(
-                task='multiclass', num_classes=self._policy.cfg.SEMANTIC_SEG.N_CHANNELS, compute_on_step=True,
+                task='multiclass', num_classes=self._model_cfg.SEMANTIC_SEG.N_CHANNELS, compute_on_step=True,
             ).cuda()
 
         if self._cfg['online_deployment']:
@@ -145,6 +156,7 @@ class MileAgent:
             is_dreaming = False
             start_time = time.time()
             if self._cfg['online_deployment']:
+                policy_input = self._preprocess(policy_input)
                 output = self._policy.deployment_forward(
                     policy_input, is_dreaming=is_dreaming)
             else:
@@ -238,7 +250,7 @@ class MileAgent:
         route_map = route_map.unsqueeze(0).expand(3, -1, -1)
         speed = input_data['speed']['forward_speed']
         intrinsics, extrinsics = calculate_geometry_from_config(
-            self._policy.cfg)
+            self._model_cfg)
 
         # Using gpu inputs
         self._policy_input_queue['image'].append(
@@ -298,7 +310,7 @@ class MileAgent:
         self._render_dict = {
             'policy_input': policy_input,
             'obs_configs': self._obs_configs,
-            'policy_cfg': self._policy.cfg,
+            'policy_cfg': self._model_cfg,
             'metrics': metrics,
         }
 
@@ -335,7 +347,7 @@ class MileAgent:
 
     def forward_metrics(self, policy_input, output):
         real_time_metrics = {}
-        if self._policy.cfg.SEMANTIC_SEG.ENABLED and DISPLAY_SEGMENTATION:
+        if self._model_cfg.SEMANTIC_SEG.ENABLED and DISPLAY_SEGMENTATION:
             with torch.no_grad():
                 bev_prediction = output['bev_segmentation_1'].detach()
                 bev_prediction = torch.argmax(bev_prediction, dim=2)[:, -1]
@@ -349,7 +361,7 @@ class MileAgent:
 
     def compute_metrics(self):
         metrics = {}
-        if self._policy.cfg.SEMANTIC_SEG.ENABLED and DISPLAY_SEGMENTATION:
+        if self._model_cfg.SEMANTIC_SEG.ENABLED and DISPLAY_SEGMENTATION:
             scores = self._iou.compute()
             metrics['intersection-over-union'] = scores.item()
             self._iou.reset()

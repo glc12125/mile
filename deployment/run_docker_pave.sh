@@ -4,6 +4,7 @@ if [ "$#" -lt 1 ]; then
   #return 1
   echo "Using default: glc12125/pytorch:1.12.1-cuda11.3-cudnn8-devel-mile-carla14"
   IMAGE_NAME=glc12125/pytorch:1.12.1-cuda11.3-cudnn8-devel-mile-carla14
+  CONTAINER_NAME=hybrid_driving
 else
   IMAGE_NAME=$1
 fi
