@@ -1,0 +1,24 @@
+TAG: 'mile'
+LOG_DIR: 'tensorboard_logs/17October2023at10:06:10UTC_bditech-W480-VISION-W_mile'
+#LOG_DIR: 'tensorboard_logs'
+
+GPUS: 2
+BATCHSIZE: 2
+STEPS: 50000
+LIMIT_TRAIN_BATCHES: 1.0
+LIMIT_VAL_BATCHES: 1.0
+N_WORKERS: 8
+VAL_CHECK_INTERVAL: 5000
+
+OPTIMIZER:
+  ACCUMULATE_GRAD_BATCHES: 2
+
+RECEPTIVE_FIELD: 6
+FUTURE_HORIZON: 6
+
+PRETRAINED:
+  PATH: 'epoch=0-step=10000-val_throttle_brake=0.22-val_steering=0.02-val_probabilistic=0.03-val_bev_segmentation_1=0.31-val_bev_center_1=0.07-val_bev_offset_1=0.07-val_loss=1.0392.ckpt'
+
+DATASET:
+  DATAROOT: ''
+  VERSION: 'mini'

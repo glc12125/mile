@@ -5,6 +5,7 @@ import time
 
 import pytorch_lightning as pl
 from pytorch_lightning.callbacks.model_checkpoint import ModelCheckpoint
+import torch
 
 from mile.config import get_parser, get_cfg
 from mile.data.dataset import DataModule
@@ -31,9 +32,12 @@ def main():
     data = DataModule(cfg)
     model = WorldModelTrainer(cfg.convert_to_dict())
 
-    save_dir = os.path.join(
-        cfg.LOG_DIR, time.strftime('%d%B%Yat%H:%M:%S%Z') + '_' + socket.gethostname() + '_' + cfg.TAG
-    )
+    if cfg.LOG_DIR == 'tensorboard_logs':
+        save_dir = os.path.join(
+            cfg.LOG_DIR, time.strftime('%d%B%Yat%H:%M:%S%Z') + '_' + socket.gethostname() + '_' + cfg.TAG
+        )
+    else:
+        save_dir = cfg.LOG_DIR
     logger = pl.loggers.TensorBoardLogger(save_dir=save_dir)
 
     callbacks = [
@@ -55,9 +59,9 @@ def main():
         limit_train_batches = cfg.LIMIT_TRAIN_BATCHES
 
     replace_sampler_ddp = not cfg.SAMPLER.ENABLED
-
+    torch.cuda.empty_cache()
     trainer = pl.Trainer(
-        gpus=cfg.GPUS,
+        devices=cfg.GPUS,
         accelerator='gpu',
         strategy='ddp',
         precision=cfg.PRECISION,
@@ -75,7 +79,10 @@ def main():
         num_sanity_val_steps=2,
     )
 
-    trainer.fit(model, datamodule=data)
+    if cfg.PRETRAINED.PATH:
+        trainer.fit(model, datamodule=data, ckpt_path=cfg.PRETRAINED.PATH)
+    else:
+        trainer.fit(model, datamodule=data)
 
 
 if __name__ == '__main__':
