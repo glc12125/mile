@@ -10,6 +10,7 @@ import logging
 import os.path
 import sys
 from time import time
+import cv2
 
 from gym.wrappers.monitoring.video_recorder import ImageEncoder
 from stable_baselines3.common.vec_env.base_vec_env import tile_images
@@ -48,9 +49,11 @@ def run_single(run_name, env, agents_dict, agents_log_dir, log_video, max_step=N
 
         render_imgs = []
         for actor_id, agent in agents_dict.items():
+            img = agent.render(info[actor_id]['reward_debug'], info[actor_id]['terminal_debug'])
+            cv2.imshow('ADAS view', img)
+            cv2.waitKey(1)
             if log_video:
-                render_imgs.append(agent.render(
-                    info[actor_id]['reward_debug'], info[actor_id]['terminal_debug']))
+                render_imgs.append(img)
             if done[actor_id] and (actor_id not in ep_stat_dict):
                 ep_stat_dict[actor_id] = info[actor_id]['episode_stat']
                 ep_event_dict[actor_id] = info[actor_id]['episode_event']

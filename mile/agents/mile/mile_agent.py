@@ -13,6 +13,7 @@ import pathlib
 from omegaconf import OmegaConf
 from torchmetrics import JaccardIndex
 import numpy as np
+import cv2
 
 from carla_gym.utils.config_utils import load_entry_point
 from mile.constants import CARLA_FPS, DISPLAY_SEGMENTATION
@@ -379,6 +380,9 @@ class MileAgent:
         # while the visualisation and carla generates (h, w, c)
         if self.image.shape[2] > 4:
             rendered_image = self.image.transpose((1, 2, 0))
+
+        #cv2.imshow('ADAS view',rendered_image)
+        #cv2.waitKey(1)
 
         if rendered_image.shape[2] == 3:
             # alpha_channel = np.full((240, 480, 1), 100, 'uint8')

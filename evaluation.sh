@@ -1,1 +1,2 @@
-bash run/evaluate.sh /root/media/crucial/carla/CARLA_0.9.11/CarlaUE4.sh /home/Development/mile/mile.ckpt 2000
+#bash run/evaluate.sh /root/media/crucial/carla/CARLA_0.9.11/CarlaUE4.sh /home/Development/mile/mile.ckpt 2000
+export CUDA_VISIBLE_DEVICES=0 && bash run/evaluate.sh /root/media/crucial/carla/CARLA_0.9.11/CarlaUE4.sh /root/media/XAVIER2T/dev/mile/mile.ckpt 2000

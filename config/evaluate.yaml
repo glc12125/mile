@@ -15,7 +15,7 @@ resume: true
 wb_project: mile
 wb_group: evaluation
 wb_tags: null
-log_video: true
+log_video: false
 
 actors:
   hero:

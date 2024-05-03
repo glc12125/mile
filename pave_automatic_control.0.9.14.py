@@ -1106,11 +1106,11 @@ def run_single(run_name, env, agents_dict, agents_log_dir, log_video, cfg, max_s
             if show_debug:
                 debug_image = agent.render(
                     info[actor_id]['reward_debug'], info[actor_id]['terminal_debug'])
-                # cv2.imshow('BEV', debug_image)
-                # cv2.waitKey(1)
-                fig.figimage(debug_image)
-                fig.canvas.draw()
-                plt.pause(0.001)
+                cv2.imshow('BEV', cv2.cvtColor(debug_image, cv2.COLOR_RGB2BGR))
+                cv2.waitKey(1)
+                #fig.figimage(debug_image)
+                #fig.canvas.draw()
+                #plt.pause(0.001)
             if done[actor_id] and (actor_id not in ep_stat_dict):
                 ep_stat_dict[actor_id] = info[actor_id]['episode_stat']
                 ep_event_dict[actor_id] = info[actor_id]['episode_event']
